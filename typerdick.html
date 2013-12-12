@@ -9,7 +9,7 @@
 
    document.addEventListener('DOMContentLoaded', function() {
       var speed = parseInt(location.hash.replace(/^#/, '')) || 0.5; // Cells per second
-      var accel = 0.05; // cells per second per second
+      var accel = 0.03; // cells per second per second
       var cellSize = 30; // Pixels
 
       var offset = 0;
@@ -17,7 +17,7 @@
       var previousTime = null;
       var playing = false;
       var points = 0;
-      var chanceOfPoints = 4 / 300;
+      var chanceOfPoints = 40 / 300;
 
       function recycleColumn() {
          var columnNode = document.querySelector('.column');
