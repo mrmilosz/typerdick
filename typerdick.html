@@ -8,7 +8,8 @@
 'use strict';
 
    document.addEventListener('DOMContentLoaded', function() {
-      var speed = parseInt(location.hash.replace(/^#/, '')) || 3; // Cells per second
+      var speed = parseInt(location.hash.replace(/^#/, '')) || 0.5; // Cells per second
+      var accel = 0.05; // cells per second per second
       var cellSize = 30; // Pixels
 
       var offset = 0;
@@ -61,6 +62,9 @@
 
       function animate(elapsedTime) {
          offset = offset + cellSize * speed * elapsedTime;
+	 speed += accel * elapsedTime;
+
+         document.querySelector('.speed').textContent = "speed: " + parseInt(speed*10)/10.0;
          while (offset >= cellSize) {
             recycleColumn();
             offset -= cellSize;
@@ -236,6 +240,8 @@
             height: 30px;
             width: 100%;
             text-align: center;
+	    -webkit-transition: background 0.2s linear;
+	            transition: background 0.2s linear;
          }
 
          .column .cell::before {
@@ -253,11 +259,11 @@
          }
 
          .column .cell.selected {
-            background-color: rgba(255, 0, 0, 0.2);
+            background-color: rgba(255, 0, 0, 0.4);
          }
 
          .column .cell.neighbor {
-            background-color: rgba(255, 0, 0, 0.05);
+            background-color: rgba(255, 0, 0, 0.2);
          }
 
          .column .cell.points {
@@ -292,6 +298,7 @@
             </div>
          </div>
          <div class="score">0</div>
+         <div class="speed">0</div>
       </div>
    </body>
 </html>
