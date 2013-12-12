@@ -1,304 +1,361 @@
 <!DOCTYPE html>
 <html>
-   <head>
-      <title>Typerdick</title>
-      <meta charset="utf-8" />
-      <script type="text/javascript">
+  <head>
+    <title>Typerdick</title>
+    <meta charset="utf-8" />
+    <script type="text/javascript">
 (function() {
 'use strict';
 
-   document.addEventListener('DOMContentLoaded', function() {
-      var speed = parseInt(location.hash.replace(/^#/, '')) || 0.5; // Cells per second
-      var accel = 0.05; // cells per second per second
-      var cellSize = 30; // Pixels
+  document.addEventListener('DOMContentLoaded', function() {
+    var speed = parseInt(location.hash.replace(/^#/, '')) || 0.5; // Cells per second
+    var accel = 0.05; // Cells per second per second
+    var cellSize = 30; // Pixels
+    var chanceOfPoints = 1 / 10; // Each cell has a 1/10 chance of being a points
 
-      var offset = 0;
-      var previousColumnLabels = ['', ''];
-      var previousTime = null;
-      var playing = false;
-      var points = 0;
-      var chanceOfPoints = 4 / 300;
+    var offset = 0;
+    var previousTime = null;
+    var playing = false;
+    var points = 0;
 
-      function recycleColumn() {
-         var columnNode = document.querySelector('.column');
-         var cellNodes = columnNode.querySelectorAll('.cell');
-         var previousCellLabels = '';
-         var currentColumnLabels = '';
+    var gridWidth = parseInt(document.querySelector('.grid').clientWidth / cellSize);
+    var gridHeight = parseInt(document.querySelector('.grid').clientHeight / cellSize);
+    console.log(gridWidth, gridHeight);
 
-         // Check if we lost
-         if (columnNode.querySelector('.selected.cell') !== null) {
-            lose();
-         }
 
-         // Clear the cells' classes
-         var neighborCellNodes = columnNode.querySelectorAll('.cell');
-         for (var i = 0; i < neighborCellNodes.length; ++i) {
-            var classList = neighborCellNodes[i].classList;
-            classList.remove('selected');
-            classList.remove('neighbor');
-            classList.remove('points');
-         }
+    var previousColumnLabels = ['', ''];
 
-         // Give the cells new random labels, avoiding any possible duplicates
-         for (var i = 0; i < cellNodes.length; ++i) {
-            var cellNode = cellNodes[i];
+    function recycleColumn() {
+      var columnNode = document.querySelector('.column');
+      var cellNodes = columnNode.querySelectorAll('.cell');
+      var previousCellLabels = '';
+      var currentColumnLabels = '';
 
-            var impossibleCellLabels = previousColumnLabels[0].substring(i - 2, i + 3) + previousColumnLabels[1].substring(i - 2, i + 3) + previousCellLabels;
-            var possibleCellLabels = ('ABCDEFGHIJKLMNOPQRSTUVWXYZ').replace(new RegExp('[' + impossibleCellLabels + ']', 'g'), '');
-            var currentCellLabel = possibleCellLabels[parseInt(Math.random() * possibleCellLabels.length)];
-            cellNode.querySelector('.label').textContent = currentCellLabel;
-            currentColumnLabels += currentCellLabel;
-            previousCellLabels = (currentCellLabel + previousCellLabels).substr(0, 2);
+      // Check if we lost
+      if (columnNode.querySelector('.selected.cell') !== null) {
+        lose();
+      }
 
-            if (Math.random() < chanceOfPoints) {
-               cellNode.classList.add('points');
+      // Clear the cells' classes
+      var neighborCellNodes = columnNode.querySelectorAll('.cell');
+      for (var i = 0; i < neighborCellNodes.length; ++i) {
+        var classList = neighborCellNodes[i].classList;
+        classList.remove('selected');
+        classList.remove('neighbor');
+        classList.remove('points');
+      }
+
+      // Give the cells new random labels, avoiding any possible duplicates
+      for (var i = 0; i < cellNodes.length; ++i) {
+        var cellNode = cellNodes[i];
+
+        var impossibleCellLabels = previousColumnLabels[0].substring(i - 2, i + 3) + previousColumnLabels[1].substring(i - 2, i + 3) + previousCellLabels;
+        var possibleCellLabels = ('ABCDEFGHIJKLMNOPQRSTUVWXYZ').replace(new RegExp('[' + impossibleCellLabels + ']', 'g'), '');
+        var currentCellLabel = possibleCellLabels[parseInt(Math.random() * possibleCellLabels.length)];
+        cellNode.querySelector('.label').textContent = currentCellLabel;
+        currentColumnLabels += currentCellLabel;
+        previousCellLabels = (currentCellLabel + previousCellLabels).substr(0, 2);
+
+        if (Math.random() < chanceOfPoints) {
+          cellNode.classList.add('points');
+        }
+      }
+      previousColumnLabels = [currentColumnLabels].concat(previousColumnLabels).slice(0, 2);
+
+      // Put the column back at the end
+      document.querySelector('.grid').appendChild(columnNode);
+    }
+
+    function animate(elapsedTime, currentTime) {
+      offset += cellSize * speed * elapsedTime;
+      speed += accel * elapsedTime;
+
+      while (offset >= cellSize) {
+        recycleColumn();
+        offset -= cellSize;
+      }
+      var currentOffset = parseInt(offset);
+      document.querySelector('.grid').style.left = -parseInt(offset) + 'px';
+
+      document.querySelector('.speed').textContent = speed.toFixed(1);
+      document.querySelector('.time').textContent = currentTime.toFixed(1);
+    }
+
+    function doFrame(currentTime) {
+      if (playing) {
+        requestAnimationFrame(doFrame);
+        if (previousTime !== null) {
+          animate((currentTime - previousTime) / 1000, currentTime / 1000);
+        }
+        previousTime = currentTime;
+      }
+    }
+
+    function start() {
+      var gridNode = document.querySelector('.grid');
+      var gridNodeInnerHtml = '';
+  
+      // Make the grid (gridWidth + 2 because 2 extra buffer rows to accomodate selected cells)
+      for (var i = 0; i < gridWidth + 2; ++i) {
+        gridNodeInnerHtml += '<div class="column">';
+        for (var j = 0; j < gridHeight; ++j) {
+          gridNodeInnerHtml += '<div class="cell">';
+          gridNodeInnerHtml += '<div class="label"></div>';
+          gridNodeInnerHtml += '</div>';
+        }
+        gridNodeInnerHtml += '</div>';
+      }
+      gridNode.innerHTML = gridNodeInnerHtml;
+
+      // Populate 5 rows to start
+      for (var i = 0; i < 5; ++i) {
+        recycleColumn();
+      }
+
+      // Place the player
+      var targetCellNode = findByIndex(findByIndex(gridNode, '.column', gridWidth - 1), '.cell', parseInt(gridHeight / 2));
+      targetCellNode.classList.remove('points');
+      selectCell(targetCellNode);
+
+      // Set the numeric crap
+      document.querySelector('.score').textContent = 0;
+      document.querySelector('.speed').textContent = 0;
+
+      // Save the cheerleader
+      playing = true;
+
+      // Save the world
+      requestAnimationFrame(doFrame);
+    }
+
+    function stop() {
+      playing = false;
+    }
+
+    function lose() {
+      stop();
+      document.querySelector('.scroller').style.display = 'none';
+      alert('Na u lose sry');
+    }
+
+    function selectCell(cellNode) {
+      if (cellNode.classList.contains('points')) {
+        ++points;
+        document.querySelector('.score').textContent = points;
+        cellNode.classList.remove('points');
+      }
+
+      var cellNodesToUnselect = document.querySelectorAll('.cell');
+      for (var i = 0; i < cellNodesToUnselect.length; ++i) {
+        var classList = cellNodesToUnselect[i].classList;
+        classList.remove('neighbor');
+        classList.remove('selected');
+      }
+
+      var gridNode = document.querySelector('.grid');
+      var cellNodeIndex = getIndex(cellNode, '.cell');
+      var columnNodeIndex = getIndex(cellNode.parentNode, '.column');
+      for (var j = columnNodeIndex - 1; j <= columnNodeIndex + 1; ++j) {
+        var targetColumnNode = findByIndex(gridNode, '.column', j);
+        if (targetColumnNode !== null) {
+          for (var i = cellNodeIndex - 1; i <= cellNodeIndex + 1; ++i) {
+            var targetCellNode = findByIndex(targetColumnNode, '.cell', i);
+            if (targetCellNode !== null) {
+              if (i === cellNodeIndex && j === columnNodeIndex) {
+                targetCellNode.classList.add('selected');
+              }
+              else if (targetCellNode.textContent !== '') {
+                targetCellNode.classList.add('neighbor');
+              }
             }
-         }
-         previousColumnLabels = [currentColumnLabels].concat(previousColumnLabels).slice(0, 2);
-
-         // Put the column back at the end
-         document.querySelector('.grid').appendChild(columnNode);
+          }
+        }
       }
+    }
 
-      function animate(elapsedTime) {
-         offset = offset + cellSize * speed * elapsedTime;
-	 speed += accel * elapsedTime;
+    function findByIndex(ancestorNode, selector, index) {
+      var nodes = ancestorNode.querySelectorAll(selector);
+      return nodes[index] || null;
+    }
 
-         document.querySelector('.speed').textContent = "speed: " + parseInt(speed*10)/10.0;
-         while (offset >= cellSize) {
-            recycleColumn();
-            offset -= cellSize;
-         }
-         var currentOffset = parseInt(offset);
-         document.querySelector('.grid').style.left = -parseInt(offset) + 'px';
+    function getIndex(node, selector) {
+      var siblings = node.parentNode.querySelectorAll(selector);
+      var index = 0;
+      var found = false;
+      for (var i = 0; i < siblings.length; ++i) {
+        if (siblings[i] === node) {
+          found = true;
+          break;
+        }
+        else {
+          ++index;
+        }
       }
+      return found ? index : -1;
+    }
 
-      function doFrame(currentTime) {
-         if (playing) {
-            requestAnimationFrame(doFrame);
-            if (previousTime !== null) {
-               animate((currentTime - previousTime) / 1000);
-            }
-            previousTime = currentTime;
-         }
+    document.addEventListener('keydown', function(event) {
+      var selectedCellNode = document.querySelector('.selected.cell');
+      var neighborCellNodes = document.querySelectorAll('.neighbor.cell');
+      for (var i = 0; i < neighborCellNodes.length; ++i) {
+        var neighborCellNode = neighborCellNodes[i]; 
+        if (
+            String.fromCharCode(event.which) === neighborCellNode.querySelector('.label').textContent &&
+            getIndex(neighborCellNode.parentNode, '.column') !== gridWidth + 2 // No moving into the last column pls
+          ) {
+          selectCell(neighborCellNode);
+        }
       }
+    });
 
-      function start() {
-         for (var i = 0; i < 5; ++i) {
-            recycleColumn();
-         }
-         selectCell(findByIndex(findByIndex(document.querySelector('.grid'), '.column', 29), '.cell', 14));
-
-         playing = true;
-         requestAnimationFrame(doFrame);
-      }
-
-      function stop() {
-         playing = false;
-      }
-
-      function lose() {
-         stop();
-         document.querySelector('.scroller').style.display = 'none';
-         document.querySelector('.score').textContent = 'Na u lose sry (' + points + ' ' + (points === 1 ? 'point' : 'points') + ')';
-      }
-
-      function selectCell(cellNode) {
-         if (cellNode.classList.contains('points')) {
-            ++points;
-            document.querySelector('.score').textContent = points;
-            cellNode.classList.remove('points');
-         }
-
-         var cellNodesToUnselect = document.querySelectorAll('.cell');
-         for (var i = 0; i < cellNodesToUnselect.length; ++i) {
-            var classList = cellNodesToUnselect[i].classList;
-            classList.remove('neighbor');
-            classList.remove('selected');
-         }
-
-         var gridNode = document.querySelector('.grid');
-         var cellNodeIndex = getIndex(cellNode, '.cell');
-         var columnNodeIndex = getIndex(cellNode.parentNode, '.column');
-         for (var j = columnNodeIndex - 1; j <= columnNodeIndex + 1; ++j) {
-            var targetColumnNode = findByIndex(gridNode, '.column', j);
-            if (targetColumnNode !== null) {
-               for (var i = cellNodeIndex - 1; i <= cellNodeIndex + 1; ++i) {
-                  var targetCellNode = findByIndex(targetColumnNode, '.cell', i);
-                  if (targetCellNode !== null) {
-                     if (i === cellNodeIndex && j === columnNodeIndex) {
-                        targetCellNode.classList.add('selected');
-                     }
-                     else {
-                        targetCellNode.classList.add('neighbor');
-                     }
-                  }
-               }
-            }
-         }
-      }
-
-      function findByIndex(ancestorNode, selector, index) {
-         var nodes = ancestorNode.querySelectorAll(selector);
-         return nodes[index] || null;
-      }
-
-      function getIndex(node, selector) {
-         var siblings = node.parentNode.querySelectorAll(selector);
-         var index = 0;
-         var found = false;
-         for (var i = 0; i < siblings.length; ++i) {
-            if (siblings[i] === node) {
-               found = true;
-               break;
-            }
-            else {
-               ++index;
-            }
-         }
-         return found ? index : -1;
-      }
-
-      document.addEventListener('keydown', function(event) {
-         var selectedCellNode = document.querySelector('.selected.cell');
-         var neighborCellNodes = document.querySelectorAll('.neighbor.cell');
-         for (var i = 0; i < neighborCellNodes.length; ++i) {
-            if (String.fromCharCode(event.which) === neighborCellNodes[i].querySelector('.label').textContent) {
-               selectCell(neighborCellNodes[i]);
-            }
-         }
-      });
-
-      start();
-   });
+    start();
+  });
 
 })();
-      </script>
-      <style type="text/css">
-         *,
-         *::before,
-         *::after {
-            -webkit-user-select: none;
-               -moz-user-select: none;
-                -ms-user-select: none;
-                 -o-user-select: none;
-                 -k-user-select: none;
-                    user-select: none;
-         }
+    </script>
+    <style type="text/css">
+*,
+*::before,
+*::after {
+  -webkit-user-select: none;
+     -moz-user-select: none;
+      -ms-user-select: none;
+       -o-user-select: none;
+       -k-user-select: none;
+          user-select: none;
+}
 
-         html,
-         body {
-            padding: 0;
-            margin: 0;
-            height: 100%;
-         }
+html,
+body {
+  padding: 0;
+  margin: 0;
+  height: 100%;
+}
 
-         body {
-            font-family: sans-serif;
-            font-size: 0;
-            white-space: nowrap;
-            text-align: center;
-         }
+body {
+  font-family: sans-serif;
+  font-size: 0;
+  white-space: nowrap;
+  text-align: center;
+}
 
-         body::before {
-            content: '';
-            height: 100%;
-            display: inline-block;
-            vertical-align: middle;
-         }
-         
-         .main {
-            font-size: 14px;
-            display: inline-block;
-            vertical-align: middle;
-            white-space: normal;
-         }
+body::before {
+  content: '';
+  height: 100%;
+  display: inline-block;
+  vertical-align: middle;
+}
 
-         .scroller {
-            font-size: 0;
-            white-space: nowrap;
-            overflow: hidden;
-            width: 900px;
-            height: 600px;
-            text-align: right;
-            box-shadow: 1px 1px 10px rgba(0, 0, 0, 0.3);
-         }
+.main {
+  font-size: 14px;
+  display: inline-block;
+  vertical-align: middle;
+  white-space: normal;
+}
 
-         .grid {
-            position: relative;
-            height: 100%;
-         }
+.scroller {
+  font-size: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  width: 900px;
+  height: 600px;
+  text-align: right;
+  box-shadow: 1px 1px 10px rgba(0, 0, 0, 0.3);
+}
 
-         .column {
-            display: inline-block;
-            vertical-align: top;
-            width: 30px;
-            height: 100%;
-         }
+.grid {
+  position: relative;
+  height: 100%;
+}
 
-         .column .cell {
-            height: 30px;
-            width: 100%;
-            text-align: center;
-	    -webkit-transition: background 0.2s linear;
-	            transition: background 0.2s linear;
-         }
+.column {
+  display: inline-block;
+  vertical-align: top;
+  width: 30px;
+  height: 100%;
+}
 
-         .column .cell::before {
-            content: '';
-            height: 100%;
-            display: inline-block;
-            vertical-align: middle;
-         }
+.column .cell {
+  height: 30px;
+  width: 100%;
+  text-align: center;
+  -webkit-transition: background 0.2s linear;
+     -moz-transition: background 0.2s linear;
+      -ms-transition: background 0.2s linear;
+       -o-transition: background 0.2s linear;
+       -k-transition: background 0.2s linear;
+          transition: background 0.2s linear;
+}
 
-         .column .cell .label {
-            white-space: normal;
-            font-size: 20px;
-            display: inline-block;
-            vertical-align: middle;
-         }
+.column .cell::before {
+  content: '';
+  height: 100%;
+  display: inline-block;
+  vertical-align: middle;
+}
 
-         .column .cell.selected {
-            background-color: rgba(255, 0, 0, 0.4);
-         }
+.column .cell .label {
+  white-space: normal;
+  font-size: 20px;
+  display: inline-block;
+  vertical-align: middle;
+}
 
-         .column .cell.neighbor {
-            background-color: rgba(255, 0, 0, 0.2);
-         }
+.column .cell.selected {
+  background-color: rgba(255, 0, 0, 0.4);
+}
 
-         .column .cell.points {
-            background-color: rgba(0, 0, 255, 0.2);
-         }
+.column .cell.neighbor {
+  background-color: rgba(255, 0, 0, 0.2);
+}
 
-         .column .cell.neighbor.points {
-            background-color: rgba(127, 0, 255, 0.2);
-         }
+.column .cell.points {
+  background-color: rgba(0, 0, 255, 0.2);
+}
 
-         .score {
-            margin-top: 10px;
-         }
+.column .cell.neighbor.points {
+  background-color: rgba(127, 0, 255, 0.2);
+}
 
-      </style>
-   </head>
-   <body>
-      <div class="main">
-         <div class="scroller">
-            <div class="grid">
-               <script type="text/javascript">
-                  for (var i = 0; i < 31; ++i) {
-                     document.write('<div class="column">');
-                     for (var j = 0; j < 20; ++j) {
-                        document.write('<div class="cell">');
-                        document.write('<div class="label"></div>');
-                        document.write('</div>');
-                     }
-                     document.write('</div>');
-                  }
-               </script>
-            </div>
-         </div>
-         <div class="score">0</div>
-         <div class="speed">0</div>
+.score {
+  margin-top: 10px;
+}
+
+.display {
+  display: inline-block;
+  text-align: left;
+  width: 200px;
+}
+
+.display::before {
+  display: inline-block;
+  width: 100px;
+  text-align: right;
+  margin-right: 5px;
+}
+
+.score::before {
+  content: 'score:';
+}
+
+.speed::before {
+  content: 'speed:';
+}
+
+.time::before {
+  content: 'suffering:';
+}
+    </style>
+  </head>
+  <body>
+    <div class="main">
+      <div class="scroller">
+        <div class="grid">
+        </div>
       </div>
-   </body>
+      <div class="score display"></div>
+      <div class="speed display"></div>
+      <div class="time display"></div>
+    </div>
+  </body>
 </html>
