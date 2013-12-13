@@ -69,7 +69,7 @@
          offset = offset + cellSize * speed * elapsedTime;
 	 speed += accel * elapsedTime;
 
-         document.querySelector('.speed').textContent = "speed: " + parseInt(speed*10)/10.0;
+         document.querySelector('.speed').textContent = "speed: " + speed.toFixed(1);
          while (offset >= cellSize) {
             recycleColumn();
             offset -= cellSize;
