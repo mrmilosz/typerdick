@@ -106,6 +106,9 @@
          stop();
          document.querySelector('.scroller').style.display = 'none';
          document.querySelector('.score').textContent = 'Na u lose sry (' + points + ' ' + (points === 1 ? 'point' : 'points') + ')';
+         document.querySelector('.speed').innerHTML = '<a href="http://twitter.com/home?status=' +
+	 	encodeURIComponent("I only scored " + points + " " + (points == 1 ? 'point' : 'points') + " in Typerdick, the dick of a typing game. " + document.URL) +
+		'">tweet this</a>';
       }
 
       function selectCell(cellNode) {
