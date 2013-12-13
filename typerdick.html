@@ -14,10 +14,10 @@
   document.addEventListener('DOMContentLoaded', function() {
     var minimumSpeed = 0.5; // Cells per second
     var accel = 0.05; // Cells per second per second
-    var speedLossOnSlow = 1;
+    var speedLossOnSlow = 0.1;
     var cellSize = 30; // Pixels
     var chanceOfPoints = 1 / 10; // Chance of a cell being a points cell
-    var chanceOfSlow = 1 / 600; // Chance of a cell being a slow cell
+    var chanceOfSlow = 1 / 100; // Chance of a cell being a slow cell
 
     var offset = 0;
     var speed = minimumSpeed;
