@@ -20,8 +20,6 @@
 
     var gridWidth = parseInt(document.querySelector('.grid').clientWidth / cellSize);
     var gridHeight = parseInt(document.querySelector('.grid').clientHeight / cellSize);
-    console.log(gridWidth, gridHeight);
-
 
     var previousColumnLabels = ['', ''];
 
@@ -113,38 +111,44 @@
       }
 
       // Place the player
-      var targetCellNode = findByIndex(findByIndex(gridNode, '.column', gridWidth - 1), '.cell', parseInt(gridHeight / 2));
+      var targetCellNode = findByIndex(findByIndex(gridNode, '.column', gridWidth - 2), '.cell', parseInt(gridHeight / 2));
       targetCellNode.classList.remove('points');
       selectCell(targetCellNode);
 
       // Set the numeric crap
       document.querySelector('.score').textContent = 0;
       document.querySelector('.speed').textContent = 0;
-
-      // Save the cheerleader
-      playing = true;
-
-      // Save the world
-      requestAnimationFrame(doFrame);
     }
 
-    function stop() {
+    function play() {
+      if (!playing) {
+        // Save the cheerleader
+        playing = true;
+
+        // Save the world
+        requestAnimationFrame(doFrame);
+      }
+    }
+
+    function pause() {
       playing = false;
     }
 
     function lose() {
-      stop();
+      pause();
       document.querySelector('.scroller').style.display = 'none';
       alert('Na u lose sry');
     }
 
     function selectCell(cellNode) {
+      // Get pointz #YOLO
       if (cellNode.classList.contains('points')) {
         ++points;
         document.querySelector('.score').textContent = points;
         cellNode.classList.remove('points');
       }
 
+      // Wipe the existing cells
       var cellNodesToUnselect = document.querySelectorAll('.cell');
       for (var i = 0; i < cellNodesToUnselect.length; ++i) {
         var classList = cellNodesToUnselect[i].classList;
@@ -152,6 +156,7 @@
         classList.remove('selected');
       }
 
+      // Home in on those suckas and set their classes
       var gridNode = document.querySelector('.grid');
       var cellNodeIndex = getIndex(cellNode, '.cell');
       var columnNodeIndex = getIndex(cellNode.parentNode, '.column');
@@ -195,6 +200,7 @@
     }
 
     document.addEventListener('keydown', function(event) {
+      play();
       var selectedCellNode = document.querySelector('.selected.cell');
       var neighborCellNodes = document.querySelectorAll('.neighbor.cell');
       for (var i = 0; i < neighborCellNodes.length; ++i) {
@@ -314,7 +320,7 @@ body::before {
 }
 
 .column .cell.neighbor.points {
-  background-color: rgba(127, 0, 255, 0.2);
+  background-color: rgba(192, 0, 255, 0.2);
 }
 
 .score {
