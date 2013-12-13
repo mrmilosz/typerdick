@@ -18,6 +18,7 @@
     var playing = false;
     var points = 0;
     var startTime = 0;
+    var firstUserInputHappened = false;
 
     var gridWidth = parseInt(document.querySelector('.grid').clientWidth / cellSize);
     var gridHeight = parseInt(document.querySelector('.grid').clientHeight / cellSize);
@@ -137,6 +138,7 @@
 
     function pause() {
       playing = false;
+      previousTime = null;
     }
 
     function lose() {
@@ -214,8 +216,23 @@
             getIndex(neighborCellNode.parentNode, '.column') !== gridWidth + 2 // No moving into the last column pls
           ) {
           play();
+          firstUserInputHappened = true;
           selectCell(neighborCellNode);
         }
+      }
+    });
+
+    window.addEventListener('blur', function(event) {
+      document.querySelector('.grid').classList.add('paused');
+      if (firstUserInputHappened) {
+        pause();
+      }
+    });
+
+    window.addEventListener('focus', function(event) {
+      document.querySelector('.grid').classList.remove('paused');
+      if (firstUserInputHappened) {
+        play();
       }
     });
 
@@ -277,6 +294,10 @@ body::before {
 .grid {
   position: relative;
   height: 100%;
+}
+
+.grid.paused .column .cell .label {
+  visibility: hidden;
 }
 
 .column {
