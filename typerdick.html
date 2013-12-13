@@ -8,12 +8,15 @@
 'use strict';
 
   document.addEventListener('DOMContentLoaded', function() {
-    var speed = parseInt(location.hash.replace(/^#/, '')) || 0.5; // Cells per second
+    var minimumSpeed = 0.5; // Cells per second
     var accel = 0.05; // Cells per second per second
+    var speedLossOnSlow = 1;
     var cellSize = 30; // Pixels
-    var chanceOfPoints = 1 / 10; // Each cell has a 1/10 chance of being a points
+    var chanceOfPoints = 1 / 10; // Chance of a cell being a points cell
+    var chanceOfSlow = 1 / 600; // Chance of a cell being a slow cell
 
     var offset = 0;
+    var speed = minimumSpeed;
     var previousTime = null;
     var playing = false;
     var points = 0;
@@ -43,6 +46,7 @@
         classList.remove('selected');
         classList.remove('neighbor');
         classList.remove('points');
+        classList.remove('slow');
       }
 
       // Give the cells new random labels, avoiding any possible duplicates
@@ -56,7 +60,10 @@
         currentColumnLabels += currentCellLabel;
         previousCellLabels = (currentCellLabel + previousCellLabels).substr(0, 2);
 
-        if (Math.random() < chanceOfPoints) {
+        if (Math.random() < chanceOfSlow) {
+          cellNode.classList.add('slow');
+        }
+        else if (Math.random() < chanceOfPoints) {
           cellNode.classList.add('points');
         }
       }
@@ -118,6 +125,7 @@
       // Place the player
       var targetCellNode = findByIndex(findByIndex(gridNode, '.column', gridWidth - 2), '.cell', parseInt(gridHeight / 2));
       targetCellNode.classList.remove('points');
+      targetCellNode.classList.remove('slow');
       selectCell(targetCellNode);
 
       // Set the numeric crap
@@ -153,6 +161,12 @@
         ++points;
         document.querySelector('.score').textContent = points;
         cellNode.classList.remove('points');
+      }
+
+      // Get slow #swag4Jesus420
+      else if (cellNode.classList.contains('slow')) {
+        speed = Math.max(speed - speedLossOnSlow, minimumSpeed);
+        cellNode.classList.remove('slow');
       }
 
       // Wipe the existing cells
@@ -345,8 +359,16 @@ body::before {
   background-color: rgba(0, 0, 255, 0.2);
 }
 
+.column .cell.slow {
+  background-color: rgba(0, 255, 0, 0.2);
+}
+
 .column .cell.neighbor.points {
   background-color: rgba(192, 0, 255, 0.2);
+}
+
+.column .cell.neighbor.slow {
+  background-color: rgba(192, 255, 0, 0.2);
 }
 
 .score {
