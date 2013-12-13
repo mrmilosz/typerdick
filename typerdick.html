@@ -3,6 +3,10 @@
   <head>
     <title>Typerdick</title>
     <meta charset="utf-8" />
+
+    <!-- Disabling mobile zoom -->
+    <meta content='user-scalable=0' name='viewport' />
+
     <script type="text/javascript">
 (function() {
 'use strict';
@@ -19,6 +23,7 @@
     var speed = minimumSpeed;
     var previousTime = null;
     var playing = false;
+    var gameOver = false;
     var points = 0;
     var startTime = 0;
     var firstUserInputHappened = false;
@@ -150,9 +155,11 @@
     }
 
     function lose() {
+      gameOver = true;
       pause();
       document.querySelector('.scroller').style.display = 'none';
       alert('Na u lose sry');
+      document.querySelector('#phonefriend').blur();
     }
 
     function selectCell(cellNode) {
@@ -220,22 +227,10 @@
       return found ? index : -1;
     }
 
-    document.addEventListener('keydown', function(event) {
-      var selectedCellNode = document.querySelector('.selected.cell');
-      var neighborCellNodes = document.querySelectorAll('.neighbor.cell');
-      for (var i = 0; i < neighborCellNodes.length; ++i) {
-        var neighborCellNode = neighborCellNodes[i]; 
-        if (
-            String.fromCharCode(event.which) === neighborCellNode.querySelector('.label').textContent &&
-            getIndex(neighborCellNode.parentNode, '.column') !== gridWidth + 2 // No moving into the last column pls
-          ) {
-          play();
-          firstUserInputHappened = true;
-          selectCell(neighborCellNode);
-        }
-      }
-    });
-
+// Using #phonefriend for input since it works on mobile and desktop...
+//    document.addEventListener('keydown', function(event) {
+//      handleGameKey(event.which);
+//    });
     window.addEventListener('blur', function(event) {
       document.querySelector('.grid').classList.add('paused');
       if (firstUserInputHappened) {
@@ -244,11 +239,40 @@
     });
 
     window.addEventListener('focus', function(event) {
+      document.querySelector('#phonefriend').focus();
       document.querySelector('.grid').classList.remove('paused');
-      if (firstUserInputHappened) {
+      if (!gameOver && firstUserInputHappened) {
         play();
       }
     });
+
+    window.addEventListener('click', function() {
+      document.querySelector('#phonefriend').focus();
+    });
+
+    document.querySelector('#phonefriend').addEventListener('input', function() {
+      var inputKeyCode = this.value.charAt(0).toUpperCase().charCodeAt(0);
+      this.value = '';
+      handleGameKey(inputKeyCode);
+    });
+
+    function handleGameKey(keyCode) {
+      if (!gameOver) {
+        var selectedCellNode = document.querySelector('.selected.cell');
+        var neighborCellNodes = document.querySelectorAll('.neighbor.cell');
+        for (var i = 0; i < neighborCellNodes.length; ++i) {
+          var neighborCellNode = neighborCellNodes[i]; 
+          if (
+              String.fromCharCode(keyCode) === neighborCellNode.querySelector('.label').textContent &&
+              getIndex(neighborCellNode.parentNode, '.column') !== gridWidth + 2 // No moving into the last column pls
+            ) {
+            play();
+            firstUserInputHappened = true;
+            selectCell(neighborCellNode);
+          }
+        }
+      }
+    }
 
     start();
   });
@@ -399,6 +423,15 @@ body::before {
 .time::before {
   content: 'suffering:';
 }
+
+#phonefriend {
+  border: none;
+  padding: 0;
+  margin: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
     </style>
   </head>
   <body>
@@ -412,4 +445,5 @@ body::before {
       <div class="time display"></div>
     </div>
   </body>
+  <input type="text" autofocus id="phonefriend"></input>
 </html>
