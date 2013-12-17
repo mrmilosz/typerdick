@@ -11,27 +11,30 @@
 (function() {
 'use strict';
 
-  var config = {
-           minimumSpeed: 0.5     , // Cells per second
-           acceleration: 0.05    , // Cells per second per second
-        speedLossOnSlow: 0.2     , // Cells per second
-              gridWidth: 30      , // Cells
-             gridHeight: 20      , // Cells
-     probabilityOfScore: 1 / 10  , // [0, 1]
-      probabilityOfSlow: 1 / 120 , // [0, 1]
-     probabilityOfBlock: 1 / 60  , // [0, 1]
+  var options = {
+          minimumSpeed: 0.5     , // Cells per second
+          acceleration: 0.05    , // Cells per second per second
+       speedLossOnSlow: 0.2     , // Cells per second
+             gridWidth: 30      , // Cells
+            gridHeight: 20      , // Cells
+    initialColumnCount: 5       , // Cells (columns)
+         probabilities: {         // [0, 1]
+           score: 1 / 10  , 
+            slow: 1 / 120 ,
+           block: 1 / 60  ,
+         },
   };
 
-  Object.freeze(config);
+  Object.freeze(options.probabilities);
+  Object.freeze(options);
 
   document.addEventListener('DOMContentLoaded', function() {
-    var timer = Timer.new();
-    var game = Game.new(config, timer);
-    timer.run();
+    var renderer = Renderer.new(document.querySelector('.main'));
+    var game = Game.new(options, renderer);
   });
 
   /*
-   * Base: the base object, I never leave home without it
+   * Base: the base object, without which I never leave home
    */
 
   var Base = Object.create(Object);
@@ -40,6 +43,10 @@
     var clone = Object.create(this);
     clone.initialize.apply(clone, arguments);
     return clone;
+  };
+
+  Base.super = function() {
+    Object.getPrototypeOf(Object.getPrototypeOf(this)).initialize.apply(this, arguments);
   };
 
   Base.initialize = function() {
@@ -82,14 +89,18 @@
   };
 
   Timer.run = function() {
-    this._previousTime = Date.now() - this._savedElapsedTime;
-    this._isPaused = false;
-    this._tick();
+    if (this._isPaused) {
+      this._previousTime = Date.now() - this._savedElapsedTime;
+      this._isPaused = false;
+      this._tick();
+    }
   };
 
   Timer.pause = function() {
-    this._savedElapsedTime = this.getTotalElapsedTime();
-    this._isPaused = true;
+    if (!this._isPaused) {
+      this._savedElapsedTime = this._getTotalElapsedTime();
+      this._isPaused = true;
+    }
   };
 
   Timer.reset = function() {
@@ -113,37 +124,26 @@
 
   var Cell = Object.create(Base);
 
-  Cell.initialize = function(x, y) {
-    this.x = x;
-    this.y = y;
-  };
-
-  /*
-   * LetterCell: typographical bullshit
-   */
-
-  var LetterCell = Object.create(Cell);
-
-  LetterCell.new = function(x, y) {
-    Cell.initialize.call(this, x, y);
+  Cell.initialize = function() {
     this.type = 0;
     this.label = '';
   };
 
-  LetterCell.modifiers = {
+  Cell.modifiers = {
     score: 1 ,
      slow: 2 ,
     block: 4 ,
   };
 
   /*
-   * PlayerCell: bullshit with a brain
+   * Player: avatar of the frail human mind
    */
 
-  var PlayerCell = Object.create(Cell);
+  var Player = Object.create(Cell);
 
-  PlayerCell.initialize = function(x, y) {
-    Cell.initialize.call(this, x, y);
+  Player.initialize = function(x, y) {
+    this.x = x;
+    this.y = y;
   };
 
   /*
@@ -152,9 +152,11 @@
 
   var Grid = Object.create(Base);
 
-  Grid.initialize = function(width, height) {
-    this.width = width; // Number of cells
-    this.height = height; // Number of cells
+  Grid.initialize = function(width, height, probabilities) {
+    this.width = width + 1; // plus 1 for the hidden column
+    this.height = height;
+
+    this._probabilities = probabilities;
     this._cells = [];
     for (var x = 0; x < width; ++x) {
       var column = [];
@@ -163,11 +165,14 @@
       }
       this._cells.push(column);
     }
-    this.cellCycleCallback = function() {};
   };
 
   Grid.getCell = function(x, y) {
-    return this._cells[x][y];
+    var column = this._cells[x];
+    if (column !== undefined) {
+      return this._cells[x][y];
+    }
+    return undefined;
   };
 
   Grid.cycle = function() {
@@ -175,41 +180,39 @@
     for (var y = 0; y < column.length; ++y) {
       var cell = column[y];
 
-      var clashingCells = ([
-        // Two columns back
-        this._cells[this._cells.length - 1][y - 2] ,
-        this._cells[this._cells.length - 1][y - 1] ,
-        this._cells[this._cells.length - 1][y - 0] ,
-        this._cells[this._cells.length - 1][y - 1] ,
-        this._cells[this._cells.length - 1][y - 2] ,
+      // A string containing all the letters that can't be used for the current cell
+      var clashingCellLabels = (
+        // Two columns back, two cells above and below
+        this._cells[this._cells.length - 2].slice(Math.max(y - 2, 0), y + 3).concat(
 
-        // One column back
-        this._cells[this._cells.length - 2][y - 2] ,
-        this._cells[this._cells.length - 2][y - 1] ,
-        this._cells[this._cells.length - 2][y - 0] ,
-        this._cells[this._cells.length - 2][y - 1] ,
-        this._cells[this._cells.length - 2][y - 2] ,
+        // One column back, two cells above and below
+        this._cells[this._cells.length - 1].slice(Math.max(y - 2, 0), y + 3)).concat(
 
-        // Current column
-        column[y - 2]                              ,
-        column[y - 1]                              ,
-      ]);
+        // Current column, two cells above
+        column.slice(Math.max(y - 2, 0), y))
+      ).reduce(function(labelString, cell) {
+        return labelString + cell.label.toUpperCase();
+      }, '');
 
-      var clashingCellLabels = clashingCells.map(function(cell) {
-        if (cell === undefined) {
-          return '';
-        }
-        return cell.label;
-      }).join('');
-      
+      // A string containing all the valid letters
       var possibleCellLabels = ('ABCDEFGHIJKLMNOPQRSTUVWXYZ').replace(new RegExp('[' + clashingCellLabels + ']', 'g'), '');
+
+      // The single valid chosen letter
       var currentCellLabel = possibleCellLabels[parseInt(Math.random() * possibleCellLabels.length)];
+
+      // Relabel and reset modifiers
       cell.label = currentCellLabel;
       cell.type = 0;
 
-      this.cellCycleCallback(cell);
+      // Apply new modifiers if the Gods will it
+      for (var modifierName in this._probabilities) {
+        if (Math.random() > this._probabilities[modifierName]) {
+          cell.type &= Cell.modifiers[modifierName];
+        }
+      }
     }
     this._cells.push(this._cells.shift());
+    return column;
   };
 
   Grid.toString = function() {
@@ -228,49 +231,239 @@
 
   var Game = Object.create(Base);
 
-  Game.initialize = function(options, timer) {
+  Game.initialize = function(options, renderer) {
+    this._renderer = renderer;
     this._minimumSpeed = options.minimumSpeed; 
     this._acceleration = options.acceleration; 
-    this._speedLossOnSlow = options._speedLossOnSlow; 
-    this._probabilityOfPoints = options._probabilityOfPoints; 
-    this._probabilityOfSlow = options._probabilityOfSlow; 
-    this._probabilityOfBlock = options._probabilityOfBlock; 
+    this._speedLossOnSlow = options.speedLossOnSlow; 
 
     this._speed = this._minimumSpeed;
-    this._offset = 0;
+    this._position = 0;
+    this._score = 0;
+    this._started = false;
+    this._over = false;
 
-    this._grid = Grid.new(options.gridWidth, options.gridHeight);
+    // Make a timer
+    this._timer = Timer.new();
 
-    this._timer = timer;
+    // Create the player
+    this._player = Player.new(options.gridWidth - options.initialColumnCount, parseInt(options.gridHeight / 2));
 
-    this._displayNode = document.querySelector('.game_for_now');
+    // Make a grid
+    this._grid = Grid.new(options.gridWidth, options.gridHeight, options.probabilities);
+    this._renderer.handle('start', this._grid, this._player);
 
-    var game = this; // Close this game object under the callbacks below
+    // Buffer up some columns so the player isn't just floating in nothingness
+    for (var i = 0; i < options.initialColumnCount; ++i) {
+      var column = this._grid.cycle();
+      this._renderer.handle('cycle', column);
+    }
 
-    this._grid.cellCycleCallback = function(cell) {
-      if (Math.random() > game.probabilityOfSlow) {
-        cell.type &= LetterCell.modifiers.slow;
-      }
-      else if (Math.random() > game._probabilityOfBlock) {
-        cell.type &= LetterCell.modifiers.block;
-      }
-      else if (Math.random() > game._probabilityOfPoints) {
-        cell.type &= LetterCell.modifiers.score;
-      }
-    };
+    // Language note: "self" is for closing "this" under the callbacks below
+    var self = this;
 
+    // Try to move the grid once per tick
     this._timer.addTickAction(function(relativeElapsedTime, totalElapsedTime) {
       var relativeElapsedTimeInSeconds = relativeElapsedTime / 1000;
+      self._position += self._speed * relativeElapsedTimeInSeconds;
 
-      game._offset += 1 * game._speed * relativeElapsedTimeInSeconds;
-      game._speed += game._acceleration * relativeElapsedTimeInSeconds;
+      while (self._position >= 1) {
+        self._position -= 1;
+        var column = self._grid.cycle();
+        self._renderer.handle('cycle', column);
+        self._player.x -= 1;
+        if (self._player.x < 0) {
+          self.lose();
+        }
+      }
 
-      while (game._offset >= 1) {
-        game._grid.cycle();
-        game._offset -= 1;
-        game._displayNode.textContent = game._grid.toString();
+      self._renderer.handle('scroll', self._position);
+      self._renderer.handle('time', totalElapsedTime / 1000);
+      self._renderer.handle('speed', self._speed);
+
+      self._speed += self._acceleration * relativeElapsedTimeInSeconds;
+    });
+
+    // Handle user input
+    window.addEventListener('keydown', function(event) {
+      if (self._over || (event.shiftKey || event.ctrlKey || event.altKey) || event.which < 65 && event.which > 91) {
+        return;
+      }
+      event.preventDefault();
+
+      var label = String.fromCharCode(event.which);
+
+      var x = self._player.x,
+        y = self._player.y;
+      var targetCell = null;
+
+      // Find the right cell among the neighbors
+      ([
+        self._grid.getCell(x - 1, y - 1) , self._grid.getCell(x + 0, y - 1) , self._grid.getCell(x + 1, y - 1) ,
+        self._grid.getCell(x - 1, y + 0) ,                                  , self._grid.getCell(x + 1, y + 0) ,
+        self._grid.getCell(x - 1, y + 1) , self._grid.getCell(x + 0, y + 1) , self._grid.getCell(x + 1, y + 1) ,
+      ]).forEach(function(cell, index) {
+        if (cell !== undefined && cell.label === label) {
+          targetCell = cell;
+          x = self._player.x + index % 3 - 1;
+          y = self._player.y + parseInt(index / 3) - 1;
+        }
+        return false;
+      });
+
+      // Nowhere to go.
+      if (targetCell === null) {
+        return;
+      }
+
+      // Can't go to a blocked cell. Sucka.
+      if (targetCell.type & Cell.modifiers.block) {
+        return;
+      }
+
+      // A slow cell will slow down the game.
+      if (targetCell.type & Cell.modifiers.slow) {
+        self._speed = Math.max(self._minimumSpeed, self._speed - self_speedLossOnSlow);
+        targetCell.type &= ~Cell.modifiers.slow;
+      }
+
+      // A score cell will... well... give you points! Hehe!
+      else if (targetCell.type & Cell.modifiers.score) {
+        self._score += 1;
+        targetCell.type &= ~Cell.modifiers.score;
+        self._renderer.handle('score', self._score);
+      }
+
+      self._player.x = x;
+      self._player.y = y;
+      self._renderer.handle('move', self._player);
+
+      if (!self._started) {
+        self.run();
+        self._started = true;
       }
     });
+  };
+
+  Game.run = function() {
+    this._timer.run();
+  };
+
+  Game.pause = function() {
+    this._timer.pause();
+  };
+
+  Game.lose = function() {
+    this._timer.pause();
+    this._over = true;
+    this._renderer.handle('lose');
+  };
+
+  /*
+   * Renderer: that which allows frail human minds to perceive and interact with the bullshit
+   */
+
+  var Renderer = Object.create(Base);
+
+  Renderer.initialize = function(mainNode) {
+    this._handlers = {};
+    
+    this._scrollerNode = mainNode.querySelector('.scroller');
+    this._statusNode = mainNode.querySelector('.status');
+    this._playerNode = mainNode.querySelector('.player');
+
+    this._addHandler('start', function(grid, player) {
+      console.log('Starting.');
+
+      this.handle('resize', grid, player);
+
+      this._playerNode.style.display = 'block';
+
+      // We also start handling resizes automatically
+      var self = this;
+      window.addEventListener('resize', function() {
+        self.handle('resize', grid, player);
+      });
+    });
+
+    this._addHandler('resize', function(grid, player) {
+      requestAnimationFrame(guiResize);
+      var self = this;
+      function guiResize() {
+        var width = document.documentElement.clientWidth;
+        var height = document.documentElement.clientHeight - self._statusNode.clientHeight;
+
+        if (width / height > grid.width / grid.height) {
+          self._cellSize = parseInt(height / grid.height);
+        }
+        else {
+          self._cellSize = parseInt(width / grid.width);
+        }
+
+        var adjustedWidth = self._cellSize * grid.width;
+        var adjustedHeight = self._cellSize * grid.height;
+
+        // Resize the generic DNB scroller
+        self._scrollerNode.style.width = adjustedWidth + 'px';
+        self._scrollerNode.style.height = adjustedHeight + 'px';
+
+        // Resize and relocate the player
+        self._playerNode.style.left = (player.x - 1) * self._cellSize + 'px';
+        self._playerNode.style.top = (player.y - 1) * self._cellSize + 'px';
+        self._playerNode.style.width = self._cellSize * 3 + 'px';
+        self._playerNode.style.height = self._cellSize * 3 + 'px';
+
+        console.log('Resizing to ' + width + 'x' + height);
+      }
+    });
+
+    this._addHandler('cycle', function(column) {
+      console.log('Cycling grid.');
+    });
+
+    this._addHandler('scroll', function(position) {
+    });
+
+    this._addHandler('move', function(player) {
+      // Relocate the player
+      this._playerNode.style.left = (player.x - 1) * this._cellSize + 'px';
+      this._playerNode.style.top = (player.y - 1) * this._cellSize + 'px';
+      console.log('Moving to (' + player.x + ', ' + player.y + ')');
+    });
+
+    this._addHandler('lose', function() {
+      console.log('You lose!');
+    });
+
+    this._addHandler('score', function(value) {
+      this._statusNode.querySelector('.score.field').textContent = value;
+    });
+
+    this._addHandler('speed', function(value) {
+      this._statusNode.querySelector('.speed.field').textContent = value.toFixed(2);
+    });
+
+    this._addHandler('time', function(value) {
+      this._statusNode.querySelector('.time.field').textContent = value.toFixed(1);
+    });
+  };
+
+  Renderer.handle = function(eventName) {
+    var self = this;
+
+    if (this._handlers[eventName] !== undefined) {
+      var handlerArguments = Array.prototype.slice.call(arguments, 1);
+      this._handlers[eventName].forEach(function(handler) {
+        handler.apply(self, handlerArguments);
+      });
+    }
+  };
+
+  Renderer._addHandler = function(eventName, handler) {
+    if (this._handlers[eventName] === undefined) {
+      this._handlers[eventName] = [];
+    }
+    this._handlers[eventName].push(handler);
   };
 
 })();
@@ -315,17 +508,62 @@ body::before {
   white-space: normal;
 }
 
-.game_for_now {
-  font-size: 12px;
-  border: 1px solid black;
-  width: 300px;
-  height: 300px;
+.status {
+  padding: 5px;
+  height: 20px;
+}
+
+.scroller {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  box-shadow: 1px 1px 10px rgba(0, 0, 0, 0.2);
+}
+
+.player {
+  position: absolute;
+  -webkit-transition: top .2s, left .2s;
+     -moz-transition: top .2s, left .2s;
+      -ms-transition: top .2s, left .2s;
+       -o-transition: top .2s, left .2s;
+       -k-transition: top .2s, left .2s;
+          transition: top .2s, left .2s;
+  display: none;
+  background-color: rgba(255, 0, 0, 0.2);
+}
+
+.field {
+  display: inline-block;
+  width: 20%;
+}
+
+.field::before {
+  margin-right: 3px;
+}
+
+.score.field::before {
+  content: 'score: ';
+}
+
+.speed.field::before {
+  content: 'speed: ';
+}
+
+.time.field::before {
+  content: 'suffering: ';
 }
     </style>
   </head>
   <body>
     <div class="main">
-      <pre class="game_for_now"></pre>
+      <div class="scroller">
+        <div class="player"></div>
+      </div>
+      <div class="status">
+        <span class="score field">0</span>
+        <span class="speed field">0.00</span>
+        <span class="time field">0.00</span>
+      </div>
     </div>
   </body>
 </html>
