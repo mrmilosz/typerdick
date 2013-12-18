@@ -11,271 +11,581 @@
 (function() {
 'use strict';
 
+  var options = {
+          minimumSpeed: 0.5     , // Cells per second
+          acceleration: 0.05    , // Cells per second per second
+       speedLossOnSlow: 0.2     , // Cells per second
+             gridWidth: 30      , // Cells
+            gridHeight: 20      , // Cells
+    initialColumnCount: 5       , // Cells (columns)
+         probabilities: {         // [0, 1]
+           score: 1 / 10  , 
+            slow: 1 / 120 ,
+           block: 1 / 60  ,
+         },
+  };
+
+  Object.freeze(options.probabilities);
+  Object.freeze(options);
+
   document.addEventListener('DOMContentLoaded', function() {
-    var minimumSpeed = 0.5; // Cells per second
-    var accel = 0.05; // Cells per second per second
-    var speedLossOnSlow = 0.2;
-    var cellSize = 30; // Pixels
-    var chanceOfPoints = 1 / 10; // Chance of a cell being a points cell
-    var chanceOfSlow = 1 / 120; // Chance of a cell being a slow cell
+    var renderer = Renderer.new(document.querySelector('.main'));
+    var game = Game.new(options, renderer);
+  });
 
-    var offset = 0;
-    var speed = minimumSpeed;
-    var previousTime = null;
-    var playing = false;
-    var gameOver = false;
-    var points = 0;
-    var startTime = 0;
-    var firstUserInputHappened = false;
+  /*
+   * Base: the base object, without which I never leave home
+   */
 
-    var gridWidth = parseInt(document.querySelector('.grid').clientWidth / cellSize);
-    var gridHeight = parseInt(document.querySelector('.grid').clientHeight / cellSize);
+  var Base = Object.create(Object);
 
-    var previousColumnLabels = ['', ''];
+  Base.new = function() {
+    var clone = Object.create(this);
+    clone.initialize.apply(clone, arguments);
+    return clone;
+  };
 
-    function recycleColumn() {
-      var columnNode = document.querySelector('.column');
-      var cellNodes = columnNode.querySelectorAll('.cell');
-      var previousCellLabels = '';
-      var currentColumnLabels = '';
+  Base.super = function() {
+    Object.getPrototypeOf(Object.getPrototypeOf(this)).initialize.apply(this, arguments);
+  };
 
-      // Check if we lost
-      if (columnNode.querySelector('.selected.cell') !== null) {
-        lose();
+  Base.initialize = function() {
+  };
+
+  /*
+   * Timer: keeps the bullshit synchronized
+   */
+
+  var Timer = Object.create(Base);
+
+  Timer.initialize = function() {
+    this._tickActions = [];
+    this._isPaused = true;
+    this.reset();
+  };
+
+  Timer._getTotalElapsedTime = function() {
+    return this._isPaused ? this._savedElapsedTime : Date.now() - this._previousTime;
+  };
+
+  Timer._tick = function() {
+    var timer = this;
+    function tick() {
+      if (timer._isPaused) {
+         return;
       }
+      requestAnimationFrame(tick);
 
-      // Clear the cells' classes
-      var neighborCellNodes = columnNode.querySelectorAll('.cell');
-      for (var i = 0; i < neighborCellNodes.length; ++i) {
-        var classList = neighborCellNodes[i].classList;
-        classList.remove('selected');
-        classList.remove('neighbor');
-        classList.remove('points');
-        classList.remove('slow');
+      var totalElapsedTime = timer._getTotalElapsedTime();
+      timer._relativeElapsedTime = totalElapsedTime - timer._lastTickElapsedTime;
+
+      timer._tickActions.forEach(function(tickAction) {
+         tickAction(timer._relativeElapsedTime, totalElapsedTime);
+      });
+
+      timer._lastTickElapsedTime = totalElapsedTime;
+    }
+    tick();
+  };
+
+  Timer.run = function() {
+    if (this._isPaused) {
+      this._previousTime = Date.now() - this._savedElapsedTime;
+      this._isPaused = false;
+      this._tick();
+    }
+  };
+
+  Timer.pause = function() {
+    if (!this._isPaused) {
+      this._savedElapsedTime = this._getTotalElapsedTime();
+      this._isPaused = true;
+    }
+  };
+
+  Timer.reset = function() {
+    this._previousTime = Date.now();
+    this._lastTickElapsedTime = 0;
+    this._savedElapsedTime = 0;
+    this._isPaused = true;
+  };
+
+  Timer.isPaused = function() {
+    return this._isPaused;
+  };
+
+  Timer.addTickAction = function(tickAction) {
+    this._tickActions.push(tickAction);
+  };
+
+  /*
+   * Cell: the smallest unit of bullshit
+   */
+
+  var Cell = Object.create(Base);
+
+  Cell.initialize = function() {
+    this.type = 0;
+    this.label = '';
+    this.data = {};
+  };
+
+  Cell.modifiers = {
+    score: 1 ,
+     slow: 2 ,
+    block: 4 ,
+  };
+
+  /*
+   * Player: avatar of the frail human mind
+   */
+
+  var Player = Object.create(Cell);
+
+  Player.initialize = function(x, y) {
+    this.x = x;
+    this.y = y;
+  };
+
+  /*
+   * Grid: the bullshit organizer
+   */
+
+  var Grid = Object.create(Base);
+
+  Grid.initialize = function(width, height, probabilities) {
+    this.width = width;
+    this.height = height;
+
+    this._bufferedWidth = this.width + 1; // plus 1 for the hidden column
+
+    this._probabilities = probabilities;
+    this.cells = [];
+    for (var x = 0; x < this._bufferedWidth; ++x) {
+      var column = [];
+      for (var y = 0; y < this.height; ++y) {
+        column.push(Cell.new(x, y));
       }
+      this.cells.push(column);
+    }
+  };
 
-      // Give the cells new random labels, avoiding any possible duplicates
-      for (var i = 0; i < cellNodes.length; ++i) {
-        var cellNode = cellNodes[i];
+  Grid.getCell = function(x, y) {
+    var column = this.cells[x];
+    if (column !== undefined) {
+      return this.cells[x][y];
+    }
+    return undefined;
+  };
 
-        var impossibleCellLabels = previousColumnLabels[0].substring(i - 2, i + 3) + previousColumnLabels[1].substring(i - 2, i + 3) + previousCellLabels;
-        var possibleCellLabels = ('ABCDEFGHIJKLMNOPQRSTUVWXYZ').replace(new RegExp('[' + impossibleCellLabels + ']', 'g'), '');
-        var currentCellLabel = possibleCellLabels[parseInt(Math.random() * possibleCellLabels.length)];
-        cellNode.querySelector('.label').textContent = currentCellLabel;
-        currentColumnLabels += currentCellLabel;
-        previousCellLabels = (currentCellLabel + previousCellLabels).substr(0, 2);
+  Grid.cycle = function() {
+    var column = this.cells[0];
+    for (var y = 0; y < column.length; ++y) {
+      var cell = column[y];
 
-        if (Math.random() < chanceOfSlow) {
-          cellNode.classList.add('slow');
+      // A string containing all the letters that can't be used for the current cell
+      var clashingCellLabels = (
+        // Two columns back, two cells above and below
+        this.cells[this.cells.length - 2].slice(Math.max(y - 2, 0), y + 3).concat(
+
+        // One column back, two cells above and below
+        this.cells[this.cells.length - 1].slice(Math.max(y - 2, 0), y + 3)).concat(
+
+        // Current column, two cells above
+        column.slice(Math.max(y - 2, 0), y))
+      ).reduce(function(labelString, cell) {
+        return labelString + cell.label.toUpperCase();
+      }, '');
+
+      // A string containing all the valid letters
+      var possibleCellLabels = ('ABCDEFGHIJKLMNOPQRSTUVWXYZ').replace(new RegExp('[' + clashingCellLabels + ']', 'g'), '');
+
+      // The single valid chosen letter
+      var currentCellLabel = possibleCellLabels[parseInt(Math.random() * possibleCellLabels.length)];
+
+      // Relabel and reset modifiers
+      cell.label = currentCellLabel;
+      cell.type = 0;
+
+      // Apply new modifiers if the Gods will it
+      for (var modifierName in this._probabilities) {
+        if (Math.random() < this._probabilities[modifierName]) {
+          cell.type |= Cell.modifiers[modifierName];
         }
-        else if (Math.random() < chanceOfPoints) {
-          cellNode.classList.add('points');
+      }
+    }
+    this.cells.push(this.cells.shift());
+    return column;
+  };
+
+  Grid.toString = function() {
+    var rows = [];
+    this.cells.forEach(function(column) {
+      column.forEach(function(cell, y) {
+        rows[y] = (rows[y] || '') + (y === this.width - 1 ? '|' : '') + (cell.label || '-');
+      });
+    });
+    return rows.join('\n');
+  };
+
+  /*
+   * Game: that which gives the bullshit meaning
+   */
+
+  var Game = Object.create(Base);
+
+  Game.initialize = function(options, renderer) {
+    this._renderer = renderer;
+    this._minimumSpeed = options.minimumSpeed; 
+    this._acceleration = options.acceleration; 
+    this._speedLossOnSlow = options.speedLossOnSlow; 
+
+    this._speed = this._minimumSpeed;
+    this._offset = 0;
+    this._position = 0;
+    this._score = 0;
+    this._started = false;
+    this._over = false;
+
+    // Make a timer
+    this._timer = Timer.new();
+
+    // Create the player
+    this._player = Player.new(options.gridWidth - options.initialColumnCount + 2, parseInt(options.gridHeight / 2));
+
+    // Make a grid
+    this._grid = Grid.new(options.gridWidth, options.gridHeight, options.probabilities);
+
+    // Buffer up some columns so the player isn't just floating in nothingness
+    for (var i = 0; i < options.initialColumnCount; ++i) {
+      var column = this._grid.cycle();
+    }
+
+    // Clear some room around the player. The player can't be getting points right away. Jesus.
+    var x = this._player.x,
+      y = this._player.y;
+    ([
+      this._grid.getCell(x - 1, y - 1) , this._grid.getCell(x + 0, y - 1) , this._grid.getCell(x + 1, y - 1) ,
+      this._grid.getCell(x - 1, y + 0) , this._grid.getCell(x + 0, y + 0) , this._grid.getCell(x + 1, y + 0) ,
+      this._grid.getCell(x - 1, y + 1) , this._grid.getCell(x + 0, y + 1) , this._grid.getCell(x + 1, y + 1) ,
+    ]).forEach(function(cell) {
+      if (cell !== undefined) {
+        cell.type = 0;
+      }
+    });
+
+    // Hit it!
+    this._renderer.handle('start', this._grid, this._player);
+
+    // Language note: "self" is for closing "this" under the callbacks below
+    var self = this;
+
+    // Try to move the grid once per tick
+    this._timer.addTickAction(function(relativeElapsedTime, totalElapsedTime) {
+      var relativeElapsedTimeInSeconds = relativeElapsedTime / 1000;
+      self._offset += self._speed * relativeElapsedTimeInSeconds;
+      self._position += self._speed * relativeElapsedTimeInSeconds;
+
+      while (self._offset >= 1) {
+        self._offset -= 1;
+        var column = self._grid.cycle();
+        self._player.x -= 1;
+        self._renderer.handle('cycle', column, self._player);
+        if (self._player.x < 0) {
+          self.lose();
         }
       }
-      previousColumnLabels = [currentColumnLabels].concat(previousColumnLabels).slice(0, 2);
 
-      // Put the column back at the end
-      document.querySelector('.grid').appendChild(columnNode);
-    }
+      self._renderer.handle('scroll', self._offset, self._position);
+      self._renderer.handle('time', totalElapsedTime / 1000);
+      self._renderer.handle('speed', self._speed);
 
-    function animate(deltaElapsedTime, totalElapsedTime) {
-      offset += cellSize * speed * deltaElapsedTime;
-      speed += accel * deltaElapsedTime;
+      self._speed += self._acceleration * relativeElapsedTimeInSeconds;
+    });
 
-      while (offset >= cellSize) {
-        recycleColumn();
-        offset -= cellSize;
+    // Handle user input
+    window.addEventListener('keydown', function(event) {
+      if (self._over || (event.shiftKey || event.ctrlKey || event.altKey) || (event.which < 65 || event.which > 91)) {
+        return;
       }
-      var currentOffset = parseInt(offset);
-      document.querySelector('.grid').style.left = -parseInt(offset) + 'px';
+      event.preventDefault();
 
-      document.querySelector('.speed').textContent = speed.toFixed(1);
-      document.querySelector('.time').textContent = totalElapsedTime.toFixed(1);
-    }
+      var label = String.fromCharCode(event.which);
 
-    function doFrame(currentTime) {
-      if (playing) {
-        requestAnimationFrame(doFrame);
-        if (previousTime !== null) {
-          animate((currentTime - previousTime) / 1000, (currentTime - startTime) / 1000);
+      var x = self._player.x,
+        y = self._player.y;
+      var targetCell = null;
+
+      // Find the right cell among the neighbors
+      ([
+        self._grid.getCell(x - 1, y - 1) , self._grid.getCell(x + 0, y - 1) , self._grid.getCell(x + 1, y - 1) ,
+        self._grid.getCell(x - 1, y + 0) ,                                  , self._grid.getCell(x + 1, y + 0) ,
+        self._grid.getCell(x - 1, y + 1) , self._grid.getCell(x + 0, y + 1) , self._grid.getCell(x + 1, y + 1) ,
+      ]).forEach(function(cell, index) {
+        if (cell !== undefined && cell.label === label) {
+          targetCell = cell;
+          x = self._player.x + index % 3 - 1;
+          y = self._player.y + parseInt(index / 3) - 1;
         }
-        else {
-          startTime = currentTime;
-        }
-        previousTime = currentTime;
-      }
-    }
+        return false;
+      });
 
-    function start() {
-      var gridNode = document.querySelector('.grid');
-      var gridNodeInnerHtml = '';
-  
-      // Make the grid (gridWidth + 2 because 2 extra buffer rows to accomodate selected cells)
-      for (var i = 0; i < gridWidth + 2; ++i) {
-        gridNodeInnerHtml += '<div class="column">';
-        for (var j = 0; j < gridHeight; ++j) {
-          gridNodeInnerHtml += '<div class="cell">';
-          gridNodeInnerHtml += '<div class="label"></div>';
-          gridNodeInnerHtml += '</div>';
-        }
-        gridNodeInnerHtml += '</div>';
-      }
-      gridNode.innerHTML = gridNodeInnerHtml;
-
-      // Populate 5 rows to start
-      for (var i = 0; i < 5; ++i) {
-        recycleColumn();
+      // Nowhere to go.
+      if (targetCell === null) {
+        return;
       }
 
-      // Place the player
-      var targetCellNode = findByIndex(findByIndex(gridNode, '.column', gridWidth - 2), '.cell', parseInt(gridHeight / 2));
-      targetCellNode.classList.remove('points');
-      targetCellNode.classList.remove('slow');
-      selectCell(targetCellNode);
-
-      // Set the numeric crap
-      document.querySelector('.score').textContent = '0';
-      document.querySelector('.speed').textContent = speed.toFixed(1);
-      document.querySelector('.time').textContent = startTime.toFixed(1);
-    }
-
-    function play() {
-      if (!playing) {
-        // Save the cheerleader
-        playing = true;
-
-        // Save the world
-        requestAnimationFrame(doFrame);
-      }
-    }
-
-    function pause() {
-      playing = false;
-      previousTime = null;
-    }
-
-    function lose() {
-      gameOver = true;
-      pause();
-      document.querySelector('.scroller').style.display = 'none';
-      alert('Na u lose sry');
-      document.querySelector('#phonefriend').blur();
-    }
-
-    function selectCell(cellNode) {
-      // Get pointz #YOLO
-      if (cellNode.classList.contains('points')) {
-        ++points;
-        document.querySelector('.score').textContent = points;
-        cellNode.classList.remove('points');
+      // Can't go to a blocked cell. Sucka.
+      if (targetCell.type & Cell.modifiers.block) {
+        return;
       }
 
-      // Get slow #swag4Jesus420
-      else if (cellNode.classList.contains('slow')) {
-        speed = Math.max(speed - speedLossOnSlow, minimumSpeed);
-        cellNode.classList.remove('slow');
+      // A slow cell will slow down the game.
+      if (targetCell.type & Cell.modifiers.slow) {
+        self._speed = Math.max(self._minimumSpeed, self._speed - self._speedLossOnSlow);
+        targetCell.type &= ~Cell.modifiers.slow;
       }
 
-      // Wipe the existing cells
-      var cellNodesToUnselect = document.querySelectorAll('.cell');
-      for (var i = 0; i < cellNodesToUnselect.length; ++i) {
-        var classList = cellNodesToUnselect[i].classList;
-        classList.remove('neighbor');
-        classList.remove('selected');
+      // A score cell will... well... give you points! Hehe!
+      else if (targetCell.type & Cell.modifiers.score) {
+        self._score += 1;
+        targetCell.type &= ~Cell.modifiers.score;
+        self._renderer.handle('score', self._score);
       }
 
-      // Home in on those suckas and set their classes
-      var gridNode = document.querySelector('.grid');
-      var cellNodeIndex = getIndex(cellNode, '.cell');
-      var columnNodeIndex = getIndex(cellNode.parentNode, '.column');
-      for (var j = columnNodeIndex - 1; j <= columnNodeIndex + 1; ++j) {
-        var targetColumnNode = findByIndex(gridNode, '.column', j);
-        if (targetColumnNode !== null) {
-          for (var i = cellNodeIndex - 1; i <= cellNodeIndex + 1; ++i) {
-            var targetCellNode = findByIndex(targetColumnNode, '.cell', i);
-            if (targetCellNode !== null) {
-              if (i === cellNodeIndex && j === columnNodeIndex) {
-                targetCellNode.classList.add('selected');
-              }
-              else if (targetCellNode.textContent !== '') {
-                targetCellNode.classList.add('neighbor');
-              }
+      self._renderer.handle('cell', targetCell);
+
+      self._player.x = x;
+      self._player.y = y;
+      self._renderer.handle('move', self._player, targetCell);
+
+      if (self._player.x < 0) {
+        self.lose();
+      }
+
+      if (!self._started) {
+        self.run();
+        self._started = true;
+      }
+    });
+  };
+
+  Game.run = function() {
+    this._timer.run();
+  };
+
+  Game.pause = function() {
+    this._timer.pause();
+  };
+
+  Game.lose = function() {
+    this._timer.pause();
+    this._over = true;
+    this._renderer.handle('lose');
+  };
+
+  /*
+   * Renderer: that which allows frail human minds to perceive and interact with the bullshit
+   */
+
+  var Renderer = Object.create(Base);
+
+  Renderer.initialize = function(mainNode) {
+    this._handlers = {};
+    this._fontSizeMultiplier = 0.85;
+    this._previousGridOffset = 0;
+    
+    this._scrollerNode = mainNode.querySelector('.scroller');
+    this._gridNode = mainNode.querySelector('.grid');
+    this._statusNode = mainNode.querySelector('.status');
+    this._playerNode = mainNode.querySelector('.player');
+    this._crosshairNode = mainNode.querySelector('.crosshair');
+    this._loseOverlayNode = mainNode.querySelector('.lose.overlay');
+
+    this._addHandler('start', function(grid, player) {
+      var self = this;
+
+      this._playerPosition = 0;
+
+      this.handle('resize', grid, player);
+
+      grid.cells.forEach(function(column, columnIndex) {
+        var columnNode = document.createElement('div');
+        columnNode.classList.add('column');
+        columnNode.style.height = grid.height * self._cellSize + 'px';
+        columnNode.style.width = self._cellSize + 'px';
+        columnNode.style.left = columnIndex * self._cellSize + 'px';
+        column.forEach(function(cell, cellIndex) {
+          var cellNode = document.createElement('div');
+          cellNode.classList.add('cell');
+          for (var modifierName in Cell.modifiers) {
+            if (cell.type & Cell.modifiers[modifierName]) {
+              cellNode.classList.add(modifierName);
             }
           }
-        }
+          var labelNode = document.createElement('span');
+          labelNode.classList.add('label');
+          labelNode.style.fontSize = parseInt(self._cellSize * self._fontSizeMultiplier) + 'px';
+          labelNode.textContent = cell.label;
+          cellNode.appendChild(labelNode)
+          cellNode.style.top = cellIndex * self._cellSize + 'px';
+          cellNode.style.width = self._cellSize + 'px';
+          cellNode.style.height = self._cellSize + 'px';
+          columnNode.appendChild(cellNode);
+          cell.data['node'] = cellNode;
+        });
+        self._gridNode.appendChild(columnNode);
+      });
+
+      // To prevent a glitchy-looking animation, make sure this happens after CSS processing...
+      setTimeout(function() {
+        self._playerNode.classList.add('visible');
+      });
+
+      // We also start handling resizes automatically
+      window.addEventListener('resize', function() {
+        self.handle('resize', grid, player);
+      });
+    });
+
+    this._addHandler('resize', function(grid, player) {
+
+      // Wow. So work to get basic information. Very verbosity. Wow.
+      var scrollerStyle = getComputedStyle(this._scrollerNode);
+      var width = document.documentElement.clientWidth - parseInt(scrollerStyle.marginLeft.replace(/px$/, '')) - parseInt(scrollerStyle.marginRight.replace(/px$/, ''));
+      var height = document.documentElement.clientHeight - this._statusNode.clientHeight - parseInt(scrollerStyle.marginTop.replace(/px$/, '')) - parseInt(scrollerStyle.marginBottom.replace(/px$/, ''));
+
+      if (width / height > grid.width / grid.height) {
+        this._cellSize = parseInt(height / grid.height);
       }
-    }
+      else {
+        this._cellSize = parseInt(width / grid.width);
+      }
 
-    function findByIndex(ancestorNode, selector, index) {
-      var nodes = ancestorNode.querySelectorAll(selector);
-      return nodes[index] || null;
-    }
+      var adjustedWidth = this._cellSize * grid.width;
+      var adjustedHeight = this._cellSize * grid.height;
 
-    function getIndex(node, selector) {
-      var siblings = node.parentNode.querySelectorAll(selector);
-      var index = 0;
-      var found = false;
-      for (var i = 0; i < siblings.length; ++i) {
-        if (siblings[i] === node) {
-          found = true;
-          break;
+      // Resize the generic DNB scroller
+      this._scrollerNode.style.width = adjustedWidth + 'px';
+      this._scrollerNode.style.height = adjustedHeight + 'px';
+
+      // Resize the grid
+      this._gridNode.style.width = adjustedWidth + this._cellSize + 'px';
+
+      // Resize and relocate the player
+      this._playerNode.style.left = -parseInt(this._cellSize * this._playerPosition) + 'px';
+      this._crosshairNode.style.left = (parseInt(this._playerPosition) + player.x - 1) * this._cellSize + 'px';
+      this._crosshairNode.style.top = (player.y - 1) * this._cellSize + 'px';
+      this._crosshairNode.style.width = this._cellSize + 'px';
+      this._crosshairNode.style.height = this._cellSize + 'px';
+      this._crosshairNode.style.borderWidth = this._cellSize + 'px';
+
+      var self = this;
+
+      // Resize the cells
+      Array.prototype.forEach.call(this._gridNode.querySelectorAll('.column'), function(columnNode, columnIndex) {
+        columnNode.style.height = grid.height * self._cellSize + 'px';
+        columnNode.style.width = self._cellSize + 'px';
+        columnNode.style.left = columnIndex * self._cellSize + 'px';
+        Array.prototype.forEach.call(columnNode.querySelectorAll('.cell'), function(cellNode, cellIndex) {
+          cellNode.style.top = cellIndex * self._cellSize + 'px';
+          cellNode.style.width = self._cellSize + 'px';
+          cellNode.style.height = self._cellSize + 'px';
+          cellNode.querySelector('.label').style.fontSize = parseInt(self._cellSize * self._fontSizeMultiplier) + 'px';
+        });
+      });
+    });
+
+    this._addHandler('cycle', function(column, player) {
+      var self = this;
+      var columnNodes = this._gridNode.querySelectorAll('.column');
+      var firstColumnNode = null;
+      Array.prototype.forEach.call(columnNodes, function(columnNode, columnIndex) {
+        if (columnIndex === 0) {
+          firstColumnNode = columnNode;
+          Array.prototype.forEach.call(columnNode.querySelectorAll('.cell'), function(cellNode, cellIndex) {
+            var cell = column[cellIndex];
+            for (var modifierName in Cell.modifiers) {
+              if (cell.type & Cell.modifiers[modifierName]) {
+                cellNode.classList.add(modifierName);
+              }
+              else {
+                cellNode.classList.remove(modifierName);
+              }
+            }
+            cellNode.querySelector('.label').textContent = cell.label;
+          });
+          columnNode.style.left = (columnNodes.length - 1) * self._cellSize + 'px';
         }
         else {
-          ++index;
+          columnNode.style.left = (parseInt(columnNode.style.left.replace(/px$/, '')) - self._cellSize) + 'px';
+        }
+      });
+      this._gridNode.appendChild(firstColumnNode);
+    });
+
+    this._addHandler('scroll', function(offset, position) {
+      this._playerPosition = position;
+      var currentGridOffset = parseInt(this._cellSize * offset);
+      if (this._previousGridOffset !== currentGridOffset) {
+        this._gridNode.style.left = -currentGridOffset + 'px';
+        this._playerNode.style.left = -parseInt(this._cellSize * position) + 'px';
+      }
+      this._previousGridOffset = currentGridOffset;
+    });
+
+    this._addHandler('move', function(player, cell) {
+      // Relocate the player
+      this._crosshairNode.style.left = (parseInt(this._playerPosition) + player.x - 1) * this._cellSize + 'px';
+      this._crosshairNode.style.top = (player.y - 1) * this._cellSize + 'px';
+    });
+
+    this._addHandler('cell', function(cell) {
+      var cellNode = cell.data['node'];
+      for (var modifierName in Cell.modifiers) {
+        if (cell.type & Cell.modifiers[modifierName]) {
+          cellNode.classList.add(modifierName);
+        }
+        else {
+          cellNode.classList.remove(modifierName);
         }
       }
-      return found ? index : -1;
+    });
+
+    this._addHandler('lose', function() {
+      this._loseOverlayNode.classList.add('visible');
+    });
+
+    this._addHandler('score', function(value) {
+      this._statusNode.querySelector('.score.field').textContent = value;
+    });
+
+    this._addHandler('speed', function(value) {
+      this._statusNode.querySelector('.speed.field').textContent = value.toFixed(2);
+    });
+
+    this._addHandler('time', function(value) {
+      this._statusNode.querySelector('.time.field').textContent = value.toFixed(1);
+    });
+  };
+
+  Renderer.handle = function(eventName) {
+    var self = this;
+
+    if (this._handlers[eventName] !== undefined) {
+      var handlerArguments = Array.prototype.slice.call(arguments, 1);
+      this._handlers[eventName].forEach(function(handler) {
+        handler.apply(self, handlerArguments);
+      });
     }
+  };
 
-// Using #phonefriend for input since it works on mobile and desktop...
-//    document.addEventListener('keydown', function(event) {
-//      handleGameKey(event.which);
-//    });
-    window.addEventListener('blur', function(event) {
-      document.querySelector('.grid').classList.add('paused');
-      if (firstUserInputHappened) {
-        pause();
-      }
-    });
-
-    window.addEventListener('focus', function(event) {
-      document.querySelector('#phonefriend').focus();
-      document.querySelector('.grid').classList.remove('paused');
-      if (!gameOver && firstUserInputHappened) {
-        play();
-      }
-    });
-
-    window.addEventListener('click', function() {
-      document.querySelector('#phonefriend').focus();
-    });
-
-    document.querySelector('#phonefriend').addEventListener('input', function() {
-      var inputKeyCode = this.value.charAt(0).toUpperCase().charCodeAt(0);
-      this.value = '';
-      handleGameKey(inputKeyCode);
-    });
-
-    function handleGameKey(keyCode) {
-      if (!gameOver) {
-        var selectedCellNode = document.querySelector('.selected.cell');
-        var neighborCellNodes = document.querySelectorAll('.neighbor.cell');
-        for (var i = 0; i < neighborCellNodes.length; ++i) {
-          var neighborCellNode = neighborCellNodes[i]; 
-          if (
-              String.fromCharCode(keyCode) === neighborCellNode.querySelector('.label').textContent &&
-              getIndex(neighborCellNode.parentNode, '.column') !== gridWidth + 2 // No moving into the last column pls
-            ) {
-            play();
-            firstUserInputHappened = true;
-            selectCell(neighborCellNode);
-          }
-        }
-      }
+  Renderer._addHandler = function(eventName, handler) {
+    if (this._handlers[eventName] === undefined) {
+      this._handlers[eventName] = [];
     }
-
-    start();
-  });
+    this._handlers[eventName].push(handler);
+  };
 
 })();
     </script>
@@ -317,133 +627,181 @@ body::before {
   display: inline-block;
   vertical-align: middle;
   white-space: normal;
+  text-align: left;
 }
 
 .scroller {
   font-size: 0;
-  white-space: nowrap;
+  margin: 10px;
+  position: relative;
+  display: inline-block;
   overflow: hidden;
-  width: 900px;
-  height: 600px;
-  text-align: right;
-  box-shadow: 1px 1px 10px rgba(0, 0, 0, 0.3);
+  box-shadow: 1px 1px 10px rgba(0, 0, 0, 0.2);
 }
 
 .grid {
-  position: relative;
-  height: 100%;
-}
-
-.grid.paused .column .cell .label {
-  visibility: hidden;
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
 }
 
 .column {
-  display: inline-block;
-  vertical-align: top;
-  width: 30px;
-  height: 100%;
+  position: absolute;
+  top: 0;
 }
 
-.column .cell {
-  height: 30px;
-  width: 100%;
+.cell {
+  position: absolute;
+  left: 0;
   text-align: center;
-  -webkit-transition: background 0.2s linear;
-     -moz-transition: background 0.2s linear;
-      -ms-transition: background 0.2s linear;
-       -o-transition: background 0.2s linear;
-       -k-transition: background 0.2s linear;
-          transition: background 0.2s linear;
+  -webkit-transition: background-color .2s;
+     -moz-transition: background-color .2s;
+      -ms-transition: background-color .2s;
+       -o-transition: background-color .2s;
+       -k-transition: background-color .2s;
+          transition: background-color .2s;
 }
 
-.column .cell::before {
+.cell.score {
+  background-color: rgba(0, 0, 255, 0.1);
+}
+
+.cell.slow {
+  background-color: rgba(0, 255, 0, 0.2);
+}
+
+.cell.block {
+  background-color: rgb(191, 191, 191);
+}
+
+.cell.block .label {
+  display: none;
+}
+
+.cell.label {
+  margin-top: 10%;
+}
+
+.player {
+  position: absolute;
+  visibility: visible;
+  opacity: 0;
+  top: 0;
+  left: 0;
+  -webkit-transition: opacity .5s;
+     -moz-transition: opacity .5s;
+      -ms-transition: opacity .5s;
+       -o-transition: opacity .5s;
+       -k-transition: opacity .5s;
+          transition: opacity .5s;
+}
+
+.player.visible {
+  opacity: 1;
+}
+
+.crosshair {
+  position: absolute;
+  border-color: rgb(255, 219, 219);
+  border-style: solid;
+  border-width: 0;
+}
+
+.player.visible .crosshair {
+  -webkit-transition: top .1s, left .1s;
+     -moz-transition: top .1s, left .1s;
+      -ms-transition: top .1s, left .1s;
+       -o-transition: top .1s, left .1s;
+       -k-transition: top .1s, left .1s;
+          transition: top .1s, left .1s;
+}
+
+.status {
+  padding: 5px;
+  text-align: center;
+}
+
+.field {
+  display: inline-block;
+  width: 30%;
+  white-space: nowrap;
+}
+
+.field::before {
+  margin-right: 3px;
+}
+
+.score.field::before {
+  content: 'score: ';
+}
+
+.speed.field::before {
+  content: 'speed: ';
+}
+
+.time.field::before {
+  content: 'suffering: ';
+}
+
+.overlay {
+  text-align: center;
+  white-space: nowrap;
+  background-color: rgba(0, 0, 0, 0.5);
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  opacity: 0;
+  -webkit-transition: opacity .5s;
+     -moz-transition: opacity .5s;
+      -ms-transition: opacity .5s;
+       -o-transition: opacity .5s;
+       -k-transition: opacity .5s;
+          transition: opacity .5s;
+}
+
+.overlay.visible {
+  opacity: 1;
+}
+
+.overlay::before {
   content: '';
   height: 100%;
   display: inline-block;
   vertical-align: middle;
 }
 
-.column .cell .label {
-  white-space: normal;
-  font-size: 20px;
+.overlay .text {
   display: inline-block;
   vertical-align: middle;
-}
-
-.column .cell.selected {
-  background-color: rgba(255, 0, 0, 0.4);
-}
-
-.column .cell.neighbor {
-  background-color: rgba(255, 0, 0, 0.2);
-}
-
-.column .cell.points {
-  background-color: rgba(0, 0, 255, 0.2);
-}
-
-.column .cell.slow {
-  background-color: rgba(0, 255, 0, 0.2);
-}
-
-.column .cell.neighbor.points {
-  background-color: rgba(192, 0, 255, 0.2);
-}
-
-.column .cell.neighbor.slow {
-  background-color: rgba(192, 255, 0, 0.2);
-}
-
-.score {
-  margin-top: 10px;
-}
-
-.display {
-  display: inline-block;
   text-align: left;
-  width: 200px;
-}
-
-.display::before {
-  display: inline-block;
-  width: 100px;
-  text-align: right;
-  margin-right: 5px;
-}
-
-.score::before {
-  content: 'score:';
-}
-
-.speed::before {
-  content: 'speed:';
-}
-
-.time::before {
-  content: 'suffering:';
-}
-
-#phonefriend {
-  border: none;
-  padding: 0;
-  margin: 0;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
+  white-space: normal;
+  font-weight: bold;
+  color: rgb(219, 219, 219);
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
+  font-size: 40px;
 }
     </style>
   </head>
   <body>
     <div class="main">
       <div class="scroller">
+        <div class="player">
+          <div class="crosshair"></div>
+        </div>
         <div class="grid">
         </div>
+        <div class="lose overlay">
+          <span class="text">Na u lose sry</span>
+        </div>
       </div>
-      <div class="score display"></div>
-      <div class="speed display"></div>
-      <div class="time display"></div>
+      <div class="status">
+        <span class="score field">0</span>
+        <span class="speed field">0.00</span>
+        <span class="time field">0.00</span>
+      </div>
     </div>
   </body>
-  <input type="text" autofocus id="phonefriend"></input>
 </html>
