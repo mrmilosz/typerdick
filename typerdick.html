@@ -347,7 +347,7 @@
       }
 
       // A score cell will... well... give you points! Hehe!
-      else if (targetCell.type & Cell.modifiers.score) {
+      if (targetCell.type & Cell.modifiers.score) {
         self._score += 1;
         targetCell.type &= ~Cell.modifiers.score;
         self._renderer.handle('score', self._score);
@@ -669,6 +669,10 @@ body::before {
 
 .cell.slow {
   background-color: rgba(0, 255, 0, 0.2);
+}
+
+.cell.slow.score {
+  background-color: rgba(0, 255, 255, 0.2);
 }
 
 .cell.block {
