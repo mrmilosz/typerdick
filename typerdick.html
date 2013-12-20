@@ -65,7 +65,7 @@
     this.reset();
   };
 
-  Timer._getTotalElapsedTime = function() {
+  Timer.getTotalElapsedTime = function() {
     return this._isPaused ? this._savedElapsedTime : Date.now() - this._previousTime;
   };
 
@@ -77,7 +77,7 @@
       }
       requestAnimationFrame(tick);
 
-      var totalElapsedTime = timer._getTotalElapsedTime();
+      var totalElapsedTime = timer.getTotalElapsedTime();
       timer._relativeElapsedTime = totalElapsedTime - timer._lastTickElapsedTime;
 
       timer._tickActions.forEach(function(tickAction) {
@@ -99,7 +99,7 @@
 
   Timer.pause = function() {
     if (!this._isPaused) {
-      this._savedElapsedTime = this._getTotalElapsedTime();
+      this._savedElapsedTime = this.getTotalElapsedTime();
       this._isPaused = true;
     }
   };
@@ -287,7 +287,7 @@
     });
 
     // Hit it!
-    this._renderer.handle('start', this._grid, this._player);
+    this._renderer.handle('setup', this._grid, this._player);
 
     // Language note: "self" is for closing "this" under the callbacks below
     var self = this;
@@ -315,7 +315,11 @@
       self._speed += self._acceleration * relativeElapsedTimeInSeconds;
     });
 
-    // Handle user input (TODO consider whether or not this should be in another module)
+    /*
+     * Input handling (TODO consider whether or not this should be in another module)
+     */
+
+    // Handle user input 
     window.addEventListener('keydown', function(event) {
       //  game over  or  modifier key was pressed                         or  not a letter
       if (self._over || (event.shiftKey || event.ctrlKey || event.altKey) || (event.which < 65 || event.which > 91)) {
@@ -379,22 +383,40 @@
       if (!self._started) {
         self.run();
         self._started = true;
+        self._renderer.handle('start');
+      }
+    });
+
+    // Handle window focussing and blurring
+    window.addEventListener('focus', function() {
+      if (self._started) {
+        self.run();
+      }
+    });
+
+    window.addEventListener('blur', function() {
+      if (self._started) {
+        self.pause();
       }
     });
   };
 
   Game.run = function() {
-    this._timer.run();
+    if (!this._over) {
+      this._timer.run();
+      this._renderer.handle('run');
+    }
   };
 
   Game.pause = function() {
     this._timer.pause();
+    this._renderer.handle('pause');
   };
 
   Game.lose = function() {
     this._timer.pause();
     this._over = true;
-    this._renderer.handle('lose');
+    this._renderer.handle('lose', this._score, this._speed, this._timer.getTotalElapsedTime());
   };
 
   /*
@@ -411,11 +433,12 @@
     this._scrollerNode = mainNode.querySelector('.scroller');
     this._gridNode = mainNode.querySelector('.grid');
     this._statusNode = mainNode.querySelector('.status');
+    this._instructionsNode = mainNode.querySelector('.instructions');
     this._playerNode = mainNode.querySelector('.player');
     this._crosshairNode = mainNode.querySelector('.crosshair');
     this._loseOverlayNode = mainNode.querySelector('.lose.overlay');
 
-    this._addHandler('start', function(grid, player) {
+    this._addHandler('setup', function(grid, player) {
       var self = this;
 
       this._playerPosition = 0;
@@ -459,8 +482,9 @@
 
       // Wow. So work to get basic information. Very verbosity. Wow.
       var scrollerStyle = getComputedStyle(this._scrollerNode);
+      console.log(this._statusNode.clientHeight);
       var width = document.documentElement.clientWidth - parseInt(scrollerStyle.marginLeft.replace(/px$/, '')) - parseInt(scrollerStyle.marginRight.replace(/px$/, ''));
-      var height = document.documentElement.clientHeight - this._statusNode.clientHeight - parseInt(scrollerStyle.marginTop.replace(/px$/, '')) - parseInt(scrollerStyle.marginBottom.replace(/px$/, ''));
+      var height = document.documentElement.clientHeight - this._statusNode.clientHeight - this._instructionsNode.clientHeight - parseInt(scrollerStyle.marginTop.replace(/px$/, '')) - parseInt(scrollerStyle.marginBottom.replace(/px$/, ''));
 
       // Cell size should always be such that we don't create scrollbars
       if (width / height > grid.width / grid.height) {
@@ -472,6 +496,12 @@
 
       var adjustedWidth = this._cellSize * grid.width;
       var adjustedHeight = this._cellSize * grid.height;
+
+      console.log(
+        -this._statusNode.clientHeight - parseInt(scrollerStyle.marginTop.replace(/px$/, '')) - parseInt(scrollerStyle.marginBottom.replace(/px$/, '')),
+        document.documentElement.clientHeight,
+        adjustedHeight
+      );
 
       // Resize the generic DNB scroller
       this._scrollerNode.style.width = adjustedWidth + 'px';
@@ -504,6 +534,18 @@
           cellNode.querySelector('.label').style.fontSize = parseInt(self._cellSize * self._fontSizeMultiplier) + 'px';
         });
       });
+    });
+
+    this._addHandler('start', function() {
+      this._scrollerNode.classList.add('ongoing');
+    });
+
+    this._addHandler('run', function() {
+      this._scrollerNode.classList.remove('paused');
+    });
+
+    this._addHandler('pause', function() {
+      this._scrollerNode.classList.add('paused');
     });
 
     this._addHandler('cycle', function(grid) {
@@ -556,7 +598,15 @@
       }
     });
 
-    this._addHandler('lose', function() {
+    this._addHandler('lose', function(score, speed, time) {
+      this._loseOverlayNode.querySelector('.tweet').setAttribute('href', 'https://twitter.com/intent/tweet?' + ([
+        [    'text', 'I only scored ' + score + ' points in Typerdick: the dickishly hard typing game'] ,
+//      ['hashtags', 'typerdick'                                                                      ] ,
+        [     'url', 'http://typerdick.com'                                                           ] ,
+      ]).map(function(item) {
+        return encodeURIComponent(item[0]) + '=' + encodeURIComponent(item[1]);
+      }).join('&'));
+      this._scrollerNode.classList.remove('ongoing');
       this._loseOverlayNode.classList.add('visible');
     });
 
@@ -627,7 +677,7 @@ body::before {
 }
 
 .main {
-  font-size: 14px;
+  font-size: 0;
   display: inline-block;
   vertical-align: middle;
   white-space: normal;
@@ -688,8 +738,12 @@ body::before {
   display: none;
 }
 
-.cell.label {
+.cell .label {
   margin-top: 10%;
+}
+
+.ongoing.paused .cell .label {
+  display: none;
 }
 
 .player {
@@ -726,7 +780,26 @@ body::before {
           transition: top .1s, left .1s;
 }
 
+.instructions {
+  padding: 5px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.instructions .red {
+  background-color: rgb(255, 219, 219);
+}
+
+.instructions .blue {
+  background-color: rgba(0, 0, 255, 0.1);
+}
+
+.instructions .green {
+  background-color: rgba(0, 255, 0, 0.2);
+}
+
 .status {
+  font-size: 14px;
   padding: 5px;
   text-align: center;
 }
@@ -756,19 +829,19 @@ body::before {
 .overlay {
   text-align: center;
   white-space: nowrap;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(255, 255, 255, 0.9);
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
   left: 0;
   opacity: 0;
-  -webkit-transition: opacity .2s;
-     -moz-transition: opacity .2s;
-      -ms-transition: opacity .2s;
-       -o-transition: opacity .2s;
-       -k-transition: opacity .2s;
-          transition: opacity .2s;
+  -webkit-transition: opacity .1s;
+     -moz-transition: opacity .1s;
+      -ms-transition: opacity .1s;
+       -o-transition: opacity .1s;
+       -k-transition: opacity .1s;
+          transition: opacity .1s;
 }
 
 .overlay.visible {
@@ -787,15 +860,32 @@ body::before {
   vertical-align: middle;
   text-align: left;
   white-space: normal;
+  color: rgb(63, 63, 63);
+}
+
+.overlay .text .heading {
+  text-align: center;
   font-weight: bold;
-  color: rgb(219, 219, 219);
-  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
   font-size: 40px;
+}
+
+.overlay .text .body {
+  text-align: center;
+  font-weight: bold;
+  font-size: 12px;
+}
+
+.overlay .text .body a {
+  margin: 0 5px;
+  color: inherit;
 }
     </style>
   </head>
   <body>
     <div class="main">
+      <div class="instructions">
+        Type the letters in the <span class="red">red</span> ring to move to them. <span class="blue">Blue</span> cells give you points. <span class="green">Green</span> cells give you sanity. Good luck.
+      </div>
       <div class="scroller">
         <div class="player">
           <div class="crosshair"></div>
@@ -803,7 +893,10 @@ body::before {
         <div class="grid">
         </div>
         <div class="lose overlay">
-          <span class="text">Na u lose sry</span>
+          <div class="text">
+            <div class="heading">Na u lose sry</div>
+            <div class="body"><a class="tweet" href>tweet how sik u r</a><a href="http://sikn1.com">get pumpd</a><a href="http://github.com/mrmilosz/typerdick">fork dis on GitHub</a></div>
+          </div>
         </div>
       </div>
       <div class="status">
