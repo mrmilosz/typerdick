@@ -26,7 +26,7 @@
   Object.freeze(options);
 
   document.addEventListener('DOMContentLoaded', function() {
-    var renderer = Renderer.new(document.querySelector('.main'));
+    var renderer = HtmlRenderer.new(document.querySelector('.main'));
     var game = Game.new(options, renderer);
   });
 
@@ -34,7 +34,7 @@
    * Base: the base object, without which I never leave home
    */
 
-  var Base = Object.create([]);
+  var Base = Object.create(Object.getPrototypeOf([]));
 
   Base.new = function() {
     var clone = Object.create(this);
@@ -318,8 +318,14 @@
 
     // Handle user input 
     window.addEventListener('keydown', function(event) {
-      //  game over  or  modifier key was pressed                         or  not a letter
-      if (self._over || (event.shiftKey || event.ctrlKey || event.altKey) || (event.which < 65 || event.which > 91)) {
+      //  backspace          and tab  are nuisances
+      if (event.which === 8 || event.which === 9) {
+        event.preventDefault();
+        return;
+      }
+
+      //       game over  or  modifier key was pressed                         or  not a letter
+      else if (self._over || (event.shiftKey || event.ctrlKey || event.altKey) || (event.which < 65 || event.which > 91)) {
         return;
       }
       event.preventDefault();
@@ -424,6 +430,34 @@
 
   Renderer.initialize = function(mainNode) {
     this._handlers = {};
+  };
+
+  Renderer.handle = function(eventName) {
+    var self = this;
+
+    if (this._handlers[eventName] !== undefined) {
+      var handlerArguments = Array.prototype.slice.call(arguments, 1);
+      this._handlers[eventName].forEach(function(handler) {
+        handler.apply(self, handlerArguments);
+      });
+    }
+  };
+
+  Renderer._addHandler = function(eventName, handler) {
+    if (this._handlers[eventName] === undefined) {
+      this._handlers[eventName] = [];
+    }
+    this._handlers[eventName].push(handler);
+  };
+
+  /*
+   * HTMLRenderer: for browsers that don't support canvas
+   */
+
+  var HtmlRenderer = Object.create(Renderer);
+
+  HtmlRenderer.initialize = function(mainNode) {
+    this.super();
     this._fontSizeMultiplier = 0.85;
     this._previousGridOffset = 0;
     
@@ -613,22 +647,15 @@
     });
   };
 
-  Renderer.handle = function(eventName) {
-    var self = this;
+  /*
+   * CanvasRenderer: the shape of things to come
+   */
 
-    if (this._handlers[eventName] !== undefined) {
-      var handlerArguments = Array.prototype.slice.call(arguments, 1);
-      this._handlers[eventName].forEach(function(handler) {
-        handler.apply(self, handlerArguments);
-      });
-    }
-  };
+  var CanvasRenderer = Object.create(Renderer);
 
-  Renderer._addHandler = function(eventName, handler) {
-    if (this._handlers[eventName] === undefined) {
-      this._handlers[eventName] = [];
-    }
-    this._handlers[eventName].push(handler);
+  CanvasRenderer.initialize = function(canvasNode) {
+    this.super();
+    ; // TODO
   };
 
 })();
@@ -708,20 +735,20 @@ body::before {
 }
 
 .cell.score {
-  background-color: rgba(0, 0, 255, 0.1);
+  background-color: rgba(0, 0, 255, 0.2);
 }
 
 .cell.slow {
-  background-color: rgba(0, 255, 0, 0.2);
+  background-color: rgba(0, 255, 0, 0.3);
 }
 
 .cell.slow.score {
-  background-color: rgba(0, 255, 127, 0.2);
+  background-color: rgba(0, 255, 127, 0.3);
 }
 
 .cell.block,
 .cell.slow.score.block {
-  background-color: rgb(191, 191, 191);
+  background-color: rgb(235, 235, 235);
 }
 
 .cell.block .label {
@@ -756,7 +783,7 @@ body::before {
 
 .crosshair {
   position: absolute;
-  border-color: rgb(255, 219, 219);
+  border-color: rgb(255, 191, 191);
   border-style: solid;
   border-width: 0;
 }
@@ -777,15 +804,15 @@ body::before {
 }
 
 .instructions .red {
-  background-color: rgb(255, 219, 219);
+  background-color: rgb(255, 191, 191);
 }
 
 .instructions .blue {
-  background-color: rgba(0, 0, 255, 0.1);
+  background-color: rgba(0, 0, 255, 0.2);
 }
 
 .instructions .green {
-  background-color: rgba(0, 255, 0, 0.2);
+  background-color: rgba(0, 255, 0, 0.3);
 }
 
 .status {
@@ -889,7 +916,7 @@ body::before {
         <div class="lose overlay">
           <div class="text">
             <div class="heading">Na u lose sry</div>
-            <div class="body"><a class="tweet wide" href>tweet how sik u r</a><a class="wide" href="http://sikn1.com">get pumpd</a><a class="wide" href="http://github.com/mrmilosz/typerdick">fork dis on GitHub</a></div>
+            <div class="body"><a class="wide" href>restart</a><a class="tweet wide" href>tweet how sik u r</a><a class="wide" href="http://sikn1.com">get pumpd</a><a class="wide" href="http://github.com/mrmilosz/typerdick">fork dis on GitHub</a></div>
             <div class="body">by <a href="http://milosz.ca">Milosz</a> with input from <a href="http://abielinski.com">Adam</a></div>
           </div>
         </div>
