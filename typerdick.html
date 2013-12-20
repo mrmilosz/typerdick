@@ -37,7 +37,7 @@
    * Base: the base object, without which I never leave home
    */
 
-  var Base = Object.create(Object);
+  var Base = Object.create([]);
 
   Base.new = function() {
     var clone = Object.create(this);
@@ -46,6 +46,7 @@
   };
 
   Base.super = function() {
+    // Gotta do it twice. (Why? Hint: var Foo = Object.create(Bar); var foo = Object.create(Foo))
     Object.getPrototypeOf(Object.getPrototypeOf(this)).initialize.apply(this, arguments);
   };
 
@@ -119,6 +120,17 @@
   };
 
   /*
+   * Player: avatar of the frail human mind
+   */
+
+  var Player = Object.create(Base);
+
+  Player.initialize = function(x, y) {
+    this.x = x;
+    this.y = y;
+  };
+
+  /*
    * Cell: the smallest unit of bullshit
    */
 
@@ -137,14 +149,13 @@
   };
 
   /*
-   * Player: avatar of the frail human mind
+   * Column: the medium unit of bullshit
    */
 
-  var Player = Object.create(Cell);
+  var Column = Object.create(Base);
 
-  Player.initialize = function(x, y) {
-    this.x = x;
-    this.y = y;
+  Column.initialize = function() {
+    this.data = {};
   };
 
   /*
@@ -160,36 +171,35 @@
     this._bufferedWidth = this.width + 1; // plus 1 for the hidden column
 
     this._probabilities = probabilities;
-    this.cells = [];
     for (var x = 0; x < this._bufferedWidth; ++x) {
-      var column = [];
+      var column = Column.new()
       for (var y = 0; y < this.height; ++y) {
-        column.push(Cell.new(x, y));
+        column.push(Cell.new());
       }
-      this.cells.push(column);
+      this.push(column);
     }
   };
 
   Grid.getCell = function(x, y) {
-    var column = this.cells[x];
-    if (column !== undefined) {
-      return this.cells[x][y];
+    var column = this[x];
+    if (column === undefined) {
+      return undefined;
     }
-    return undefined;
+    return this[x][y];
   };
 
   Grid.cycle = function() {
-    var column = this.cells[0];
+    var column = this[0];
     for (var y = 0; y < column.length; ++y) {
       var cell = column[y];
 
       // A string containing all the letters that can't be used for the current cell
       var clashingCellLabels = (
         // Two columns back, two cells above and below
-        this.cells[this.cells.length - 2].slice(Math.max(y - 2, 0), y + 3).concat(
+        this[this.length - 2].slice(Math.max(y - 2, 0), y + 3).concat(
 
         // One column back, two cells above and below
-        this.cells[this.cells.length - 1].slice(Math.max(y - 2, 0), y + 3)).concat(
+        this[this.length - 1].slice(Math.max(y - 2, 0), y + 3)).concat(
 
         // Current column, two cells above
         column.slice(Math.max(y - 2, 0), y))
@@ -214,15 +224,17 @@
         }
       }
     }
-    this.cells.push(this.cells.shift());
-    return column;
+
+    // Cycle the array
+    this.push(this.shift());
   };
 
   Grid.toString = function() {
     var rows = [];
-    this.cells.forEach(function(column) {
+    var self = this;
+    this.forEach(function(column, x) {
       column.forEach(function(cell, y) {
-        rows[y] = (rows[y] || '') + (y === this.width - 1 ? '|' : '') + (cell.label || '-');
+        rows[y] = (rows[y] || '') + (x === self.width ? '|' : '') + (cell.label || '-');
       });
     });
     return rows.join('\n');
@@ -288,9 +300,9 @@
 
       while (self._offset >= 1) {
         self._offset -= 1;
-        var column = self._grid.cycle();
+        self._grid.cycle();
+        self._renderer.handle('cycle', self._grid);
         self._player.x -= 1;
-        self._renderer.handle('cycle', column, self._player);
         if (self._player.x < 0) {
           self.lose();
         }
@@ -303,8 +315,9 @@
       self._speed += self._acceleration * relativeElapsedTimeInSeconds;
     });
 
-    // Handle user input
+    // Handle user input (TODO consider whether or not this should be in another module)
     window.addEventListener('keydown', function(event) {
+      //  game over  or  modifier key was pressed                         or  not a letter
       if (self._over || (event.shiftKey || event.ctrlKey || event.altKey) || (event.which < 65 || event.which > 91)) {
         return;
       }
@@ -407,14 +420,9 @@
 
       this._playerPosition = 0;
 
-      this.handle('resize', grid, player);
-
-      grid.cells.forEach(function(column, columnIndex) {
+      grid.forEach(function(column, columnIndex) {
         var columnNode = document.createElement('div');
         columnNode.classList.add('column');
-        columnNode.style.height = grid.height * self._cellSize + 'px';
-        columnNode.style.width = self._cellSize + 'px';
-        columnNode.style.left = columnIndex * self._cellSize + 'px';
         column.forEach(function(cell, cellIndex) {
           var cellNode = document.createElement('div');
           cellNode.classList.add('cell');
@@ -425,19 +433,18 @@
           }
           var labelNode = document.createElement('span');
           labelNode.classList.add('label');
-          labelNode.style.fontSize = parseInt(self._cellSize * self._fontSizeMultiplier) + 'px';
           labelNode.textContent = cell.label;
           cellNode.appendChild(labelNode)
-          cellNode.style.top = cellIndex * self._cellSize + 'px';
-          cellNode.style.width = self._cellSize + 'px';
-          cellNode.style.height = self._cellSize + 'px';
           columnNode.appendChild(cellNode);
           cell.data['node'] = cellNode;
         });
+        column.data['node'] = columnNode;
         self._gridNode.appendChild(columnNode);
       });
 
-      // To prevent a glitchy-looking animation, make sure this happens after CSS processing...
+      this.handle('resize', grid, player);
+
+      // To prevent a glitchy-looking animation, show the player after CSS processing...
       setTimeout(function() {
         self._playerNode.classList.add('visible');
       });
@@ -455,6 +462,7 @@
       var width = document.documentElement.clientWidth - parseInt(scrollerStyle.marginLeft.replace(/px$/, '')) - parseInt(scrollerStyle.marginRight.replace(/px$/, ''));
       var height = document.documentElement.clientHeight - this._statusNode.clientHeight - parseInt(scrollerStyle.marginTop.replace(/px$/, '')) - parseInt(scrollerStyle.marginBottom.replace(/px$/, ''));
 
+      // Cell size should always be such that we don't create scrollbars
       if (width / height > grid.width / grid.height) {
         this._cellSize = parseInt(height / grid.height);
       }
@@ -483,11 +491,13 @@
       var self = this;
 
       // Resize the cells
-      Array.prototype.forEach.call(this._gridNode.querySelectorAll('.column'), function(columnNode, columnIndex) {
+      grid.forEach(function(column, columnIndex) {
+        var columnNode = column.data['node'];
         columnNode.style.height = grid.height * self._cellSize + 'px';
         columnNode.style.width = self._cellSize + 'px';
         columnNode.style.left = columnIndex * self._cellSize + 'px';
-        Array.prototype.forEach.call(columnNode.querySelectorAll('.cell'), function(cellNode, cellIndex) {
+        column.forEach(function(cell, cellIndex) {
+          var cellNode = cell.data['node'];
           cellNode.style.top = cellIndex * self._cellSize + 'px';
           cellNode.style.width = self._cellSize + 'px';
           cellNode.style.height = self._cellSize + 'px';
@@ -496,15 +506,13 @@
       });
     });
 
-    this._addHandler('cycle', function(column, player) {
+    this._addHandler('cycle', function(grid) {
       var self = this;
-      var columnNodes = this._gridNode.querySelectorAll('.column');
-      var firstColumnNode = null;
-      Array.prototype.forEach.call(columnNodes, function(columnNode, columnIndex) {
-        if (columnIndex === 0) {
-          firstColumnNode = columnNode;
-          Array.prototype.forEach.call(columnNode.querySelectorAll('.cell'), function(cellNode, cellIndex) {
-            var cell = column[cellIndex];
+      grid.forEach(function(column, columnIndex) {
+        var columnNode = column.data['node'];
+        if (columnIndex === grid.length - 1) {
+          column.forEach(function(cell) {
+            var cellNode = cell.data['node'];
             for (var modifierName in Cell.modifiers) {
               if (cell.type & Cell.modifiers[modifierName]) {
                 cellNode.classList.add(modifierName);
@@ -515,13 +523,9 @@
             }
             cellNode.querySelector('.label').textContent = cell.label;
           });
-          columnNode.style.left = (columnNodes.length - 1) * self._cellSize + 'px';
         }
-        else {
-          columnNode.style.left = (parseInt(columnNode.style.left.replace(/px$/, '')) - self._cellSize) + 'px';
-        }
+        columnNode.style.left = (columnIndex * self._cellSize) + 'px';
       });
-      this._gridNode.appendChild(firstColumnNode);
     });
 
     this._addHandler('scroll', function(offset, position) {
@@ -759,12 +763,12 @@ body::before {
   bottom: 0;
   left: 0;
   opacity: 0;
-  -webkit-transition: opacity .5s;
-     -moz-transition: opacity .5s;
-      -ms-transition: opacity .5s;
-       -o-transition: opacity .5s;
-       -k-transition: opacity .5s;
-          transition: opacity .5s;
+  -webkit-transition: opacity .2s;
+     -moz-transition: opacity .2s;
+      -ms-transition: opacity .2s;
+       -o-transition: opacity .2s;
+       -k-transition: opacity .2s;
+          transition: opacity .2s;
 }
 
 .overlay.visible {
