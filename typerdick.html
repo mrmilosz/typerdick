@@ -479,7 +479,6 @@
 
       // Wow. So work to get basic information. Very verbosity. Wow.
       var scrollerStyle = getComputedStyle(this._scrollerNode);
-      console.log(this._statusNode.clientHeight);
       var width = document.documentElement.clientWidth - parseInt(scrollerStyle.marginLeft.replace(/px$/, '')) - parseInt(scrollerStyle.marginRight.replace(/px$/, ''));
       var height = document.documentElement.clientHeight - this._statusNode.clientHeight - this._instructionsNode.clientHeight - parseInt(scrollerStyle.marginTop.replace(/px$/, '')) - parseInt(scrollerStyle.marginBottom.replace(/px$/, ''));
 
@@ -493,12 +492,6 @@
 
       var adjustedWidth = this._cellSize * grid.width;
       var adjustedHeight = this._cellSize * grid.height;
-
-      console.log(
-        -this._statusNode.clientHeight - parseInt(scrollerStyle.marginTop.replace(/px$/, '')) - parseInt(scrollerStyle.marginBottom.replace(/px$/, '')),
-        document.documentElement.clientHeight,
-        adjustedHeight
-      );
 
       // Resize the generic DNB scroller
       this._scrollerNode.style.width = adjustedWidth + 'px';
