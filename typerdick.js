@@ -19,7 +19,8 @@
   Object.freeze(options);
 
   document.addEventListener('DOMContentLoaded', function() {
-    var renderer = HtmlRenderer.new(document.querySelector('.main'));
+//  var renderer = CanvasTyperdickRenderer.new(document.querySelector('.main'));
+    var renderer = HtmlTyperdickRenderer.new(document.querySelector('.main'));
     var game = Game.new(options, renderer);
   });
 
@@ -33,11 +34,6 @@
     var clone = Object.create(this);
     clone.initialize.apply(clone, arguments);
     return clone;
-  };
-
-  Base.super = function() {
-    // Gotta do it twice. (Why? Hint: var Foo = Object.create(Bar); var foo = Object.create(Foo))
-    Object.getPrototypeOf(Object.getPrototypeOf(this)).initialize.apply(this, arguments);
   };
 
   Base.initialize = function() {
@@ -421,7 +417,7 @@
 
   var Renderer = Object.create(Base);
 
-  Renderer.initialize = function(mainNode) {
+  Renderer.initialize = function() {
     this._handlers = {};
   };
 
@@ -444,23 +440,58 @@
   };
 
   /*
-   * HTMLRenderer: for browsers that don't support canvas
+   * TyperdickRenderer: common, but non-generic functionality
    */
 
-  var HtmlRenderer = Object.create(Renderer);
+  var TyperdickRenderer = Object.create(Renderer);
 
-  HtmlRenderer.initialize = function(mainNode) {
-    this.super();
+  TyperdickRenderer.initialize = function(mainNode) {
+    Renderer.initialize.call(this);
+
     this._fontSizeMultiplier = 0.85;
-    this._previousGridOffset = 0;
-    
-    this._scrollerNode = mainNode.querySelector('.scroller');
-    this._gridNode = mainNode.querySelector('.grid');
+    this._gameNode = mainNode.querySelector('.game');
     this._statusNode = mainNode.querySelector('.status');
     this._instructionsNode = mainNode.querySelector('.instructions');
     this._playerNode = mainNode.querySelector('.player');
     this._crosshairNode = mainNode.querySelector('.crosshair');
     this._loseOverlayNode = mainNode.querySelector('.lose.overlay');
+
+    this._addHandler('lose', function(score, speed, time) {
+      this._loseOverlayNode.querySelector('.tweet').setAttribute('href', 'https://twitter.com/intent/tweet?' + ([
+        [    'text', 'I only scored ' + score + ' points in Typerdick: the dickishly hard typing game'] ,
+//      ['hashtags', 'typerdick'                                                                      ] ,
+        [     'url', 'http://typerdick.com'                                                           ] ,
+      ]).map(function(item) {
+        return encodeURIComponent(item[0]) + '=' + encodeURIComponent(item[1]);
+      }).join('&'));
+      this._loseOverlayNode.classList.add('visible');
+    });
+
+    this._addHandler('score', function(value) {
+      this._statusNode.querySelector('.score.field').textContent = value;
+    });
+
+    this._addHandler('speed', function(value) {
+      this._statusNode.querySelector('.speed.field').textContent = value.toFixed(2);
+    });
+
+    this._addHandler('time', function(value) {
+      this._statusNode.querySelector('.time.field').textContent = value.toFixed(1);
+    });
+  };
+
+  /*
+   * HTMLRenderer: for browsers that don't support canvas
+   */
+
+  var HtmlTyperdickRenderer = Object.create(TyperdickRenderer);
+
+  HtmlTyperdickRenderer.initialize = function(mainNode) {
+    TyperdickRenderer.initialize.call(this, mainNode);
+
+    this._previousGridOffset = 0;
+
+    this._gridNode = mainNode.querySelector('.grid');
 
     this._addHandler('setup', function(grid, player) {
       var self = this;
@@ -505,9 +536,9 @@
     this._addHandler('resize', function(grid, player) {
 
       // Wow. So work to get basic information. Very verbosity. Wow.
-      var scrollerStyle = getComputedStyle(this._scrollerNode);
-      var width = document.documentElement.clientWidth - parseInt(scrollerStyle.marginLeft.replace(/px$/, '')) - parseInt(scrollerStyle.marginRight.replace(/px$/, ''));
-      var height = document.documentElement.clientHeight - this._statusNode.clientHeight - this._instructionsNode.clientHeight - parseInt(scrollerStyle.marginTop.replace(/px$/, '')) - parseInt(scrollerStyle.marginBottom.replace(/px$/, ''));
+      var gameStyle = getComputedStyle(this._gameNode);
+      var width = document.documentElement.clientWidth - parseInt(gameStyle.marginLeft.replace(/px$/, '')) - parseInt(gameStyle.marginRight.replace(/px$/, ''));
+      var height = document.documentElement.clientHeight - this._statusNode.clientHeight - this._instructionsNode.clientHeight - parseInt(gameStyle.marginTop.replace(/px$/, '')) - parseInt(gameStyle.marginBottom.replace(/px$/, ''));
 
       // Cell size should always be such that we don't create scrollbars
       if (width / height > grid.width / grid.height) {
@@ -520,9 +551,9 @@
       var adjustedWidth = this._cellSize * grid.width;
       var adjustedHeight = this._cellSize * grid.height;
 
-      // Resize the generic DNB scroller
-      this._scrollerNode.style.width = adjustedWidth + 'px';
-      this._scrollerNode.style.height = adjustedHeight + 'px';
+      // Resize the game
+      this._gameNode.style.width = adjustedWidth + 'px';
+      this._gameNode.style.height = adjustedHeight + 'px';
 
       // Resize the grid
       this._gridNode.style.width = adjustedWidth + this._cellSize + 'px';
@@ -554,15 +585,15 @@
     });
 
     this._addHandler('start', function() {
-      this._scrollerNode.classList.add('ongoing');
+      this._gameNode.classList.add('ongoing');
     });
 
     this._addHandler('run', function() {
-      this._scrollerNode.classList.remove('paused');
+      this._gameNode.classList.remove('paused');
     });
 
     this._addHandler('pause', function() {
-      this._scrollerNode.classList.add('paused');
+      this._gameNode.classList.add('paused');
     });
 
     this._addHandler('cycle', function(grid) {
@@ -614,41 +645,114 @@
         }
       }
     });
-
-    this._addHandler('lose', function(score, speed, time) {
-      this._loseOverlayNode.querySelector('.tweet').setAttribute('href', 'https://twitter.com/intent/tweet?' + ([
-        [    'text', 'I only scored ' + score + ' points in Typerdick: the dickishly hard typing game'] ,
-//      ['hashtags', 'typerdick'                                                                      ] ,
-        [     'url', 'http://typerdick.com'                                                           ] ,
-      ]).map(function(item) {
-        return encodeURIComponent(item[0]) + '=' + encodeURIComponent(item[1]);
-      }).join('&'));
-      this._scrollerNode.classList.remove('ongoing');
-      this._loseOverlayNode.classList.add('visible');
-    });
-
-    this._addHandler('score', function(value) {
-      this._statusNode.querySelector('.score.field').textContent = value;
-    });
-
-    this._addHandler('speed', function(value) {
-      this._statusNode.querySelector('.speed.field').textContent = value.toFixed(2);
-    });
-
-    this._addHandler('time', function(value) {
-      this._statusNode.querySelector('.time.field').textContent = value.toFixed(1);
-    });
   };
 
   /*
    * CanvasRenderer: the shape of things to come (they've not yet come)
    */
 
-  var CanvasRenderer = Object.create(Renderer);
+  var CanvasTyperdickRenderer = Object.create(TyperdickRenderer);
 
-  CanvasRenderer.initialize = function(canvasNode) {
-    this.super();
-    ; // TODO
+  CanvasTyperdickRenderer.initialize = function(mainNode) {
+    TyperdickRenderer.initialize.call(this, mainNode);
+
+    this._addHandler('setup', function(grid, player) {
+      var self = this;
+
+      this._playerPosition = 0;
+      this._canvasNode = document.createElement('canvas');
+      var gridNode = mainNode.querySelector('.grid');
+      gridNode.style.right = '0';
+      gridNode.appendChild(this._canvasNode);
+
+      this._canvasContext = this._canvasNode.getContext('2d');
+
+      this.handle('resize', grid, player);
+
+      grid.forEach(function(column, columnIndex) {
+        column.forEach(function(cell, cellIndex) {
+          for (var modifierName in Cell.modifiers) {
+            if (cell.type & Cell.modifiers[modifierName]) {
+            }
+          }
+          self._canvasContext.fillText(cell.label, columnIndex * self._cellSize, cellIndex * self._cellSize);
+        });
+      });
+
+      // To prevent a glitchy-looking animation, show the player after CSS processing...
+      setTimeout(function() {
+        self._playerNode.classList.add('visible');
+      });
+
+      // We also start handling resizes automatically
+      window.addEventListener('resize', function() {
+        self.handle('resize', grid, player);
+      });
+    });
+
+    this._addHandler('resize', function(grid, player) {
+      // Wow. So work to get basic information. Very verbosity. Wow.
+      var gameStyle = getComputedStyle(this._gameNode);
+      var width = document.documentElement.clientWidth - parseInt(gameStyle.marginLeft.replace(/px$/, '')) - parseInt(gameStyle.marginRight.replace(/px$/, ''));
+      var height = document.documentElement.clientHeight - this._statusNode.clientHeight - this._instructionsNode.clientHeight - parseInt(gameStyle.marginTop.replace(/px$/, '')) - parseInt(gameStyle.marginBottom.replace(/px$/, ''));
+
+      // Cell size should always be such that we don't create scrollbars
+      if (width / height > grid.width / grid.height) {
+        this._cellSize = parseInt(height / grid.height);
+      }
+      else {
+        this._cellSize = parseInt(width / grid.width);
+      }
+
+      var adjustedWidth = this._cellSize * grid.width;
+      var adjustedHeight = this._cellSize * grid.height;
+
+      // Resize the game
+      this._gameNode.style.width = adjustedWidth + 'px';
+      this._gameNode.style.height = adjustedHeight + 'px';
+
+      this._canvasNode.width = adjustedWidth;
+      this._canvasNode.height = adjustedHeight;
+
+      this._canvasNode.style.fontSize = parseInt(self._cellSize * self._fontSizeMultiplier) + 'px';
+
+      // Resize and relocate the player
+      this._playerNode.style.left = -parseInt(this._cellSize * this._playerPosition) + 'px';
+      this._crosshairNode.style.left = (parseInt(this._playerPosition) + player.x - 1) * this._cellSize + 'px';
+      this._crosshairNode.style.top = (player.y - 1) * this._cellSize + 'px';
+      this._crosshairNode.style.width = this._cellSize + 'px';
+      this._crosshairNode.style.height = this._cellSize + 'px';
+      this._crosshairNode.style.borderWidth = this._cellSize + 'px';
+    });
+
+    this._addHandler('cycle', function(grid) {
+    });
+
+    this._addHandler('scroll', function(offset, position) {
+      this._playerPosition = position;
+      var currentGridOffset = parseInt(this._cellSize * offset);
+      if (this._previousGridOffset !== currentGridOffset) {
+        this._playerNode.style.left = -parseInt(this._cellSize * position) + 'px';
+      }
+      this._previousGridOffset = currentGridOffset;
+    });
+
+    this._addHandler('move', function(player, cell) {
+      // Relocate the player
+      this._crosshairNode.style.left = (parseInt(this._playerPosition) + player.x - 1) * this._cellSize + 'px';
+      this._crosshairNode.style.top = (player.y - 1) * this._cellSize + 'px';
+    });
+
+    this._addHandler('cell', function(cell) {
+      for (var modifierName in Cell.modifiers) {
+        if (cell.type & Cell.modifiers[modifierName]) {
+          ; // TODO
+        }
+        else {
+          ; // TODO
+        }
+      }
+    });
   };
 
 })();

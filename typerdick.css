@@ -39,7 +39,7 @@ body::before {
   text-align: left;
 }
 
-.scroller {
+.game {
   font-size: 0;
   margin: 10px;
   position: relative;
@@ -53,6 +53,12 @@ body::before {
   top: 0;
   left: 0;
   bottom: 0;
+}
+
+.grid canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
 }
 
 .column {
