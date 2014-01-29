@@ -1,3 +1,7 @@
+/*
+ * License: http://www.dbad-license.org/
+ */
+
 (function() {
 'use strict';
 
