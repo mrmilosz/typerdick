@@ -1,4 +1,5 @@
 /*
+ * © new Date().getFullYear() Milosz Kosmider and Adam Bielinski
  * License: http://www.dbad-license.org/
  */
 
