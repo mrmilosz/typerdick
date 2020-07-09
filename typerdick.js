@@ -221,6 +221,7 @@ var __spreadArrays = (this && this.__spreadArrays) || function () {
      */
     var Game = Object.create(Base);
     Game.initialize = function (options, renderer) {
+        var _this = this;
         this._renderer = renderer;
         this._minimumSpeed = options.minimumSpeed;
         this._acceleration = options.acceleration;
@@ -239,10 +240,10 @@ var __spreadArrays = (this && this.__spreadArrays) || function () {
         this._grid = Grid.new(options.gridWidth, options.gridHeight, options.probabilities);
         // Buffer up some columns so the player isn't just floating in nothingness
         for (var i = 0; i < options.initialColumnCount; ++i) {
-            var column = this._grid.cycle();
+            /* let column =  */ this._grid.cycle();
         }
         // Clear some room around the player. The player can't be getting points right away. Jesus.
-        var x = this._player.x, y = this._player.y;
+        var _a = this._player, x = _a.x, y = _a.y;
         [
             this._grid.getCell(x - 1, y - 1),
             this._grid.getCell(x + 0, y - 1),
@@ -260,30 +261,29 @@ var __spreadArrays = (this && this.__spreadArrays) || function () {
         });
         // Hit it!
         this._renderer.handle("setup", this._grid, this._player);
-        // Language note: "self" is for closing "this" under the callbacks below
-        var self = this;
         // Try to move the grid once per tick
         this._timer.addTickAction(function (relativeElapsedTime, totalElapsedTime) {
             var relativeElapsedTimeInSeconds = relativeElapsedTime / 1000;
-            self._offset += self._speed * relativeElapsedTimeInSeconds;
-            self._position += self._speed * relativeElapsedTimeInSeconds;
-            while (self._offset >= 1) {
-                self._offset -= 1;
-                self._grid.cycle();
-                self._renderer.handle("cycle", self._grid);
-                self._player.x -= 1;
-                if (self._player.x < 0) {
-                    self.lose();
+            _this._offset += _this._speed * relativeElapsedTimeInSeconds;
+            _this._position += _this._speed * relativeElapsedTimeInSeconds;
+            while (_this._offset >= 1) {
+                _this._offset -= 1;
+                _this._grid.cycle();
+                _this._renderer.handle("cycle", _this._grid);
+                _this._player.x -= 1;
+                if (_this._player.x < 0) {
+                    _this.lose();
                 }
             }
-            self._renderer.handle("scroll", self._offset, self._position);
-            self._renderer.handle("time", totalElapsedTime / 1000);
-            self._renderer.handle("speed", self._speed);
-            self._speed += self._acceleration * relativeElapsedTimeInSeconds;
+            _this._renderer.handle("scroll", _this._offset, _this._position);
+            _this._renderer.handle("time", totalElapsedTime / 1000);
+            _this._renderer.handle("speed", _this._speed);
+            _this._speed += _this._acceleration * relativeElapsedTimeInSeconds;
         });
         /*
-         * Input handling (TODO consider whether or not this should be in another module)
+         * Input handling
          */
+        // TODO: consider whether or not this should be in another module
         // Handle user input
         window.addEventListener("keydown", function (event) {
             //  backspace          and tab  are nuisances
@@ -292,7 +292,7 @@ var __spreadArrays = (this && this.__spreadArrays) || function () {
                 return;
             }
             //       game over  or  modifier key was pressed                         or  not a letter
-            else if (self._over ||
+            else if (_this._over ||
                 event.shiftKey ||
                 event.ctrlKey ||
                 event.altKey ||
@@ -302,26 +302,26 @@ var __spreadArrays = (this && this.__spreadArrays) || function () {
             }
             event.preventDefault();
             var label = String.fromCharCode(event.which);
-            var x = self._player.x, y = self._player.y;
+            var _a = _this._player, x = _a.x, y = _a.y;
             var targetCell = null;
             // Find the right cell among the neighbors
             [
-                self._grid.getCell(x - 1, y - 1),
-                self._grid.getCell(x + 0, y - 1),
-                self._grid.getCell(x + 1, y - 1),
-                self._grid.getCell(x - 1, y + 0),
+                _this._grid.getCell(x - 1, y - 1),
+                _this._grid.getCell(x + 0, y - 1),
+                _this._grid.getCell(x + 1, y - 1),
+                _this._grid.getCell(x - 1, y + 0),
                 ,
-                self._grid.getCell(x + 1, y + 0),
-                self._grid.getCell(x - 1, y + 1),
-                self._grid.getCell(x + 0, y + 1),
-                self._grid.getCell(x + 1, y + 1),
+                _this._grid.getCell(x + 1, y + 0),
+                _this._grid.getCell(x - 1, y + 1),
+                _this._grid.getCell(x + 0, y + 1),
+                _this._grid.getCell(x + 1, y + 1),
             ].forEach(function (cell, index) {
                 if (cell !== undefined && cell.label === label) {
                     targetCell = cell;
-                    x = self._player.x + (index % 3) - 1;
-                    y = self._player.y + parseInt(index / 3) - 1;
+                    x = _this._player.x + (index % 3) - 1;
+                    y = _this._player.y + parseInt("" + index / 3) - 1;
                 }
-                return false;
+                return "hello how are you today?";
             });
             // Nowhere to go.
             if (targetCell === null) {
@@ -333,37 +333,37 @@ var __spreadArrays = (this && this.__spreadArrays) || function () {
             }
             // A slow cell will slow down the game.
             if (targetCell.type & Cell.modifiers.slow) {
-                self._speed = Math.max(self._minimumSpeed, self._speed - self._speedLossOnSlow);
+                _this._speed = Math.max(_this._minimumSpeed, _this._speed - _this._speedLossOnSlow);
                 targetCell.type &= ~Cell.modifiers.slow;
             }
             // A score cell will... well... give you points! Hehe!
             if (targetCell.type & Cell.modifiers.score) {
-                self._score += 1;
+                _this._score += 1;
                 targetCell.type &= ~Cell.modifiers.score;
-                self._renderer.handle("score", self._score);
+                _this._renderer.handle("score", _this._score);
             }
-            self._renderer.handle("cell", targetCell);
-            self._player.x = x;
-            self._player.y = y;
-            self._renderer.handle("move", self._player, targetCell);
-            if (self._player.x < 0) {
-                self.lose();
+            _this._renderer.handle("cell", targetCell);
+            _this._player.x = x;
+            _this._player.y = y;
+            _this._renderer.handle("move", _this._player, targetCell);
+            if (_this._player.x < 0) {
+                _this.lose();
             }
-            if (!self._started) {
-                self.run();
-                self._started = true;
-                self._renderer.handle("start");
+            if (!_this._started) {
+                _this.run();
+                _this._started = true;
+                _this._renderer.handle("start");
             }
         });
         // Handle window focussing and blurring
         window.addEventListener("focus", function () {
-            if (self._started) {
-                self.run();
+            if (_this._started) {
+                _this.run();
             }
         });
         window.addEventListener("blur", function () {
-            if (self._started) {
-                self.pause();
+            if (_this._started) {
+                _this.pause();
             }
         });
     };

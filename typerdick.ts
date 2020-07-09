@@ -180,16 +180,13 @@
   /**
    * Cell: the smallest unit of bullshit
    */
+
   const Cell = Object.create(Base);
   type CellType = BaseType & {
     type: number;
     label: string;
     data: {};
-    modifiers: {
-      score: number;
-      slow: number;
-      block: number;
-    };
+    modifiers: OptionsType["probabilities"];
   };
 
   Cell.initialize = function () {
@@ -268,10 +265,10 @@
   Grid.cycle = function () {
     var column = this[0];
     for (var y = 0; y < column.length; ++y) {
-      var cell = column[y];
+      const cell = column[y];
 
       // A string containing all the letters that can't be used for the current cell
-      var clashingCellLabels = this[this.length - 2]
+      const clashingCellLabels: string = this[this.length - 2]
         .slice(Math.max(y - 2, 0), y + 3)
         .concat(
           // One column back, two cells above and below
@@ -351,8 +348,10 @@
     _timer: TimerType;
     _player: PlayerType;
     _grid: GridType;
+    lose(): void;
+    run(): void;
+    pause(): void;
   };
-  type RendererType = {}; // TODO
 
   Game.initialize = function (options, renderer) {
     this._renderer = renderer;
@@ -384,13 +383,12 @@
     );
 
     // Buffer up some columns so the player isn't just floating in nothingness
-    for (var i = 0; i < options.initialColumnCount; ++i) {
-      var column = this._grid.cycle();
+    for (let i = 0; i < options.initialColumnCount; ++i) {
+      /* let column =  */ this._grid.cycle();
     }
 
     // Clear some room around the player. The player can't be getting points right away. Jesus.
-    var x = this._player.x,
-      y = this._player.y;
+    const { x, y } = this._player;
     [
       this._grid.getCell(x - 1, y - 1),
       this._grid.getCell(x + 0, y - 1),
@@ -410,38 +408,36 @@
     // Hit it!
     this._renderer.handle("setup", this._grid, this._player);
 
-    // Language note: "self" is for closing "this" under the callbacks below
-    var self = this;
-
     // Try to move the grid once per tick
-    this._timer.addTickAction(function (relativeElapsedTime, totalElapsedTime) {
+    this._timer.addTickAction((relativeElapsedTime, totalElapsedTime) => {
       var relativeElapsedTimeInSeconds = relativeElapsedTime / 1000;
-      self._offset += self._speed * relativeElapsedTimeInSeconds;
-      self._position += self._speed * relativeElapsedTimeInSeconds;
+      this._offset += this._speed * relativeElapsedTimeInSeconds;
+      this._position += this._speed * relativeElapsedTimeInSeconds;
 
-      while (self._offset >= 1) {
-        self._offset -= 1;
-        self._grid.cycle();
-        self._renderer.handle("cycle", self._grid);
-        self._player.x -= 1;
-        if (self._player.x < 0) {
-          self.lose();
+      while (this._offset >= 1) {
+        this._offset -= 1;
+        this._grid.cycle();
+        this._renderer.handle("cycle", this._grid);
+        this._player.x -= 1;
+        if (this._player.x < 0) {
+          this.lose();
         }
       }
 
-      self._renderer.handle("scroll", self._offset, self._position);
-      self._renderer.handle("time", totalElapsedTime / 1000);
-      self._renderer.handle("speed", self._speed);
+      this._renderer.handle("scroll", this._offset, this._position);
+      this._renderer.handle("time", totalElapsedTime / 1000);
+      this._renderer.handle("speed", this._speed);
 
-      self._speed += self._acceleration * relativeElapsedTimeInSeconds;
+      this._speed += this._acceleration * relativeElapsedTimeInSeconds;
     });
 
     /*
-     * Input handling (TODO consider whether or not this should be in another module)
+     * Input handling
      */
+    // TODO: consider whether or not this should be in another module
 
     // Handle user input
-    window.addEventListener("keydown", function (event) {
+    window.addEventListener("keydown", (event) => {
       //  backspace          and tab  are nuisances
       if (event.which === 8 || event.which === 9) {
         event.preventDefault();
@@ -450,7 +446,7 @@
 
       //       game over  or  modifier key was pressed                         or  not a letter
       else if (
-        self._over ||
+        this._over ||
         event.shiftKey ||
         event.ctrlKey ||
         event.altKey ||
@@ -461,30 +457,29 @@
       }
       event.preventDefault();
 
-      var label = String.fromCharCode(event.which);
+      const label = String.fromCharCode(event.which);
 
-      var x = self._player.x,
-        y = self._player.y;
-      var targetCell = null;
+      let { x, y } = this._player;
+      let targetCell = null as null | CellType;
 
       // Find the right cell among the neighbors
       [
-        self._grid.getCell(x - 1, y - 1),
-        self._grid.getCell(x + 0, y - 1),
-        self._grid.getCell(x + 1, y - 1),
-        self._grid.getCell(x - 1, y + 0),
+        this._grid.getCell(x - 1, y - 1),
+        this._grid.getCell(x + 0, y - 1),
+        this._grid.getCell(x + 1, y - 1),
+        this._grid.getCell(x - 1, y + 0), // <-- you are here
         ,
-        self._grid.getCell(x + 1, y + 0),
-        self._grid.getCell(x - 1, y + 1),
-        self._grid.getCell(x + 0, y + 1),
-        self._grid.getCell(x + 1, y + 1),
-      ].forEach(function (cell, index) {
+        this._grid.getCell(x + 1, y + 0),
+        this._grid.getCell(x - 1, y + 1),
+        this._grid.getCell(x + 0, y + 1),
+        this._grid.getCell(x + 1, y + 1),
+      ].forEach((cell, index) => {
         if (cell !== undefined && cell.label === label) {
           targetCell = cell;
-          x = self._player.x + (index % 3) - 1;
-          y = self._player.y + parseInt(index / 3) - 1;
+          x = this._player.x + (index % 3) - 1;
+          y = this._player.y + parseInt(`${index / 3}`) - 1;
         }
-        return false;
+        return "hello how are you today?";
       });
 
       // Nowhere to go.
@@ -499,47 +494,47 @@
 
       // A slow cell will slow down the game.
       if (targetCell.type & Cell.modifiers.slow) {
-        self._speed = Math.max(
-          self._minimumSpeed,
-          self._speed - self._speedLossOnSlow
+        this._speed = Math.max(
+          this._minimumSpeed,
+          this._speed - this._speedLossOnSlow
         );
         targetCell.type &= ~Cell.modifiers.slow;
       }
 
       // A score cell will... well... give you points! Hehe!
       if (targetCell.type & Cell.modifiers.score) {
-        self._score += 1;
+        this._score += 1;
         targetCell.type &= ~Cell.modifiers.score;
-        self._renderer.handle("score", self._score);
+        this._renderer.handle("score", this._score);
       }
 
-      self._renderer.handle("cell", targetCell);
+      this._renderer.handle("cell", targetCell);
 
-      self._player.x = x;
-      self._player.y = y;
-      self._renderer.handle("move", self._player, targetCell);
+      this._player.x = x;
+      this._player.y = y;
+      this._renderer.handle("move", this._player, targetCell);
 
-      if (self._player.x < 0) {
-        self.lose();
+      if (this._player.x < 0) {
+        this.lose();
       }
 
-      if (!self._started) {
-        self.run();
-        self._started = true;
-        self._renderer.handle("start");
+      if (!this._started) {
+        this.run();
+        this._started = true;
+        this._renderer.handle("start");
       }
     });
 
     // Handle window focussing and blurring
-    window.addEventListener("focus", function () {
-      if (self._started) {
-        self.run();
+    window.addEventListener("focus", () => {
+      if (this._started) {
+        this.run();
       }
     });
 
-    window.addEventListener("blur", function () {
-      if (self._started) {
-        self.pause();
+    window.addEventListener("blur", () => {
+      if (this._started) {
+        this.pause();
       }
     });
   };
@@ -571,7 +566,10 @@
    * Renderer: that which allows frail human minds to perceive and interact with the bullshit
    */
 
-  var Renderer = Object.create(Base);
+  const Renderer: RendererType = Object.create(Base);
+  type RendererType = {
+    handle(action: string, ...args: any[]);
+  };
 
   Renderer.initialize = function () {
     this._handlers = {};
