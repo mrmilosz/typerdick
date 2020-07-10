@@ -390,11 +390,15 @@ var __spreadArrays = (this && this.__spreadArrays) || function () {
         this._handlers = {};
     };
     Renderer.handle = function (eventName) {
-        var self = this;
-        if (this._handlers[eventName] !== undefined) {
-            var handlerArguments = Array.prototype.slice.call(arguments, 1);
-            this._handlers[eventName].forEach(function (handler) {
-                handler.apply(self, handlerArguments);
+        var _this = this;
+        var args = [];
+        for (var _i = 1; _i < arguments.length; _i++) {
+            args[_i - 1] = arguments[_i];
+        }
+        var eventHandlersList = this._handlers[eventName];
+        if (eventHandlersList !== undefined) {
+            eventHandlersList.forEach(function (handler) {
+                handler.apply(_this, args);
             });
         }
     };
@@ -409,6 +413,7 @@ var __spreadArrays = (this && this.__spreadArrays) || function () {
      */
     var TyperdickRenderer = Object.create(Renderer);
     TyperdickRenderer.initialize = function (mainNode) {
+        var _this = this;
         Renderer.initialize.call(this);
         this._fontSizeMultiplier = 0.85;
         this._gameNode = mainNode.querySelector(".game");
@@ -418,31 +423,30 @@ var __spreadArrays = (this && this.__spreadArrays) || function () {
         this._crosshairNode = mainNode.querySelector(".crosshair");
         this._loseOverlayNode = mainNode.querySelector(".lose.overlay");
         this._addHandler("lose", function (score, speed, time) {
-            this._loseOverlayNode.querySelector(".tweet").setAttribute("href", "https://twitter.com/intent/tweet?" +
+            _this._loseOverlayNode.querySelector(".tweet").setAttribute("href", "https://twitter.com/intent/tweet?" + [
                 [
-                    [
-                        "text",
-                        "I only scored " +
-                            score +
-                            " points in Typerdick: the dickishly hard typing game",
-                    ],
-                    //      ['hashtags', 'typerdick'                                                                      ] ,
-                    ["url", "http://typerdick.com"],
-                ]
-                    .map(function (item) {
-                    return (encodeURIComponent(item[0]) + "=" + encodeURIComponent(item[1]));
-                })
-                    .join("&"));
-            this._loseOverlayNode.classList.add("visible");
+                    "text",
+                    "I only scored " +
+                        score +
+                        " points in Typerdick: the dickishly hard typing game",
+                ],
+                //      ['hashtags', 'typerdick'                                                                      ] ,
+                ["url", "http://typerdick.com"],
+            ]
+                .map(function (item) {
+                return encodeURIComponent(item[0]) + "=" + encodeURIComponent(item[1]);
+            })
+                .join("&"));
+            _this._loseOverlayNode.classList.add("visible");
         });
         this._addHandler("score", function (value) {
-            this._statusNode.querySelector(".score.field").textContent = value;
+            _this._statusNode.querySelector(".score.field").textContent = "" + value;
         });
         this._addHandler("speed", function (value) {
-            this._statusNode.querySelector(".speed.field").textContent = value.toFixed(2);
+            _this._statusNode.querySelector(".speed.field").textContent = Number(value).toFixed(2);
         });
         this._addHandler("time", function (value) {
-            this._statusNode.querySelector(".time.field").textContent = value.toFixed(1);
+            _this._statusNode.querySelector(".time.field").textContent = Number(value).toFixed(1);
         });
     };
     /**
@@ -450,12 +454,12 @@ var __spreadArrays = (this && this.__spreadArrays) || function () {
      */
     var HtmlTyperdickRenderer = Object.create(TyperdickRenderer);
     HtmlTyperdickRenderer.initialize = function (mainNode) {
+        var _this = this;
         TyperdickRenderer.initialize.call(this, mainNode);
         this._previousGridOffset = 0;
         this._gridNode = mainNode.querySelector(".grid");
         this._addHandler("setup", function (grid, player) {
-            var self = this;
-            this._playerPosition = 0;
+            _this._playerPosition = 0;
             grid.forEach(function (column, columnIndex) {
                 var columnNode = document.createElement("div");
                 columnNode.classList.add("column");
@@ -475,80 +479,79 @@ var __spreadArrays = (this && this.__spreadArrays) || function () {
                     cell.data["node"] = cellNode;
                 });
                 column.data["node"] = columnNode;
-                self._gridNode.appendChild(columnNode);
+                _this._gridNode.appendChild(columnNode);
             });
-            this.handle("resize", grid, player);
+            _this.handle("resize", grid, player);
             // To prevent a glitchy-looking animation, show the player after CSS processing...
             setTimeout(function () {
-                self._playerNode.classList.add("visible");
+                _this._playerNode.classList.add("visible");
             });
             // We also start handling resizes automatically
             window.addEventListener("resize", function () {
-                self.handle("resize", grid, player);
+                _this.handle("resize", grid, player);
             });
         });
         this._addHandler("resize", function (grid, player) {
             // Wow. So work to get basic information. Very verbosity. Wow.
-            var gameStyle = getComputedStyle(this._gameNode);
+            var gameStyle = getComputedStyle(_this._gameNode);
             var width = document.documentElement.clientWidth -
                 parseInt(gameStyle.marginLeft.replace(/px$/, "")) -
                 parseInt(gameStyle.marginRight.replace(/px$/, ""));
             var height = document.documentElement.clientHeight -
-                this._statusNode.clientHeight -
-                this._instructionsNode.clientHeight -
+                _this._statusNode.clientHeight -
+                _this._instructionsNode.clientHeight -
                 parseInt(gameStyle.marginTop.replace(/px$/, "")) -
                 parseInt(gameStyle.marginBottom.replace(/px$/, ""));
             // Cell size should always be such that we don't create scrollbars
             if (width / height > grid.width / grid.height) {
-                this._cellSize = parseInt(height / grid.height);
+                _this._cellSize = parseInt("" + height / grid.height);
             }
             else {
-                this._cellSize = parseInt(width / grid.width);
+                _this._cellSize = parseInt("" + width / grid.width);
             }
-            var adjustedWidth = this._cellSize * grid.width;
-            var adjustedHeight = this._cellSize * grid.height;
+            var adjustedWidth = _this._cellSize * grid.width;
+            var adjustedHeight = _this._cellSize * grid.height;
             // Resize the game
-            this._gameNode.style.width = adjustedWidth + "px";
-            this._gameNode.style.height = adjustedHeight + "px";
+            _this._gameNode.style.width = adjustedWidth + "px";
+            _this._gameNode.style.height = adjustedHeight + "px";
             // Resize the grid
-            this._gridNode.style.width = adjustedWidth + this._cellSize + "px";
+            _this._gridNode.style.width = adjustedWidth + _this._cellSize + "px";
             // Resize and relocate the player
-            this._playerNode.style.left =
-                -parseInt(this._cellSize * this._playerPosition) + "px";
-            this._crosshairNode.style.left =
-                (parseInt(this._playerPosition) + player.x - 1) * this._cellSize + "px";
-            this._crosshairNode.style.top = (player.y - 1) * this._cellSize + "px";
-            this._crosshairNode.style.width = this._cellSize + "px";
-            this._crosshairNode.style.height = this._cellSize + "px";
-            this._crosshairNode.style.borderWidth = this._cellSize + "px";
-            var self = this;
+            _this._playerNode.style.left =
+                -parseInt("" + _this._cellSize * _this._playerPosition) + "px";
+            _this._crosshairNode.style.left =
+                (parseInt("" + _this._playerPosition) + player.x - 1) * _this._cellSize +
+                    "px";
+            _this._crosshairNode.style.top = (player.y - 1) * _this._cellSize + "px";
+            _this._crosshairNode.style.width = _this._cellSize + "px";
+            _this._crosshairNode.style.height = _this._cellSize + "px";
+            _this._crosshairNode.style.borderWidth = _this._cellSize + "px";
             // Resize the cells
             grid.forEach(function (column, columnIndex) {
                 var columnNode = column.data["node"];
-                columnNode.style.height = grid.height * self._cellSize + "px";
-                columnNode.style.width = self._cellSize + "px";
-                columnNode.style.left = columnIndex * self._cellSize + "px";
+                columnNode.style.height = grid.height * _this._cellSize + "px";
+                columnNode.style.width = _this._cellSize + "px";
+                columnNode.style.left = columnIndex * _this._cellSize + "px";
                 column.forEach(function (cell, cellIndex) {
                     var cellNode = cell.data["node"];
-                    cellNode.style.top = cellIndex * self._cellSize + "px";
-                    cellNode.style.width = self._cellSize + "px";
-                    cellNode.style.height = self._cellSize + "px";
+                    cellNode.style.top = cellIndex * _this._cellSize + "px";
+                    cellNode.style.width = _this._cellSize + "px";
+                    cellNode.style.height = _this._cellSize + "px";
                     cellNode.querySelector(".label").style.fontSize =
-                        parseInt(self._cellSize * self._fontSizeMultiplier) + "px";
+                        parseInt("" + _this._cellSize * _this._fontSizeMultiplier) + "px";
                 });
             });
         });
         this._addHandler("start", function () {
-            this._gameNode.classList.add("ongoing");
+            _this._gameNode.classList.add("ongoing");
         });
         this._addHandler("run", function () {
-            this._gameNode.classList.remove("paused");
+            _this._gameNode.classList.remove("paused");
         });
         this._addHandler("pause", function () {
-            this._gameNode.classList.add("paused");
+            _this._gameNode.classList.add("paused");
         });
         this._addHandler("cycle", function (grid) {
-            var self = this;
             grid.forEach(function (column, columnIndex) {
                 var columnNode = column.data["node"];
                 if (columnIndex === grid.length - 1) {
@@ -565,24 +568,25 @@ var __spreadArrays = (this && this.__spreadArrays) || function () {
                         cellNode.querySelector(".label").textContent = cell.label;
                     });
                 }
-                columnNode.style.left = columnIndex * self._cellSize + "px";
+                columnNode.style.left = columnIndex * _this._cellSize + "px";
             });
         });
         this._addHandler("scroll", function (offset, position) {
-            this._playerPosition = position;
-            var currentGridOffset = parseInt(this._cellSize * offset);
-            if (this._previousGridOffset !== currentGridOffset) {
-                this._gridNode.style.left = -currentGridOffset + "px";
-                this._playerNode.style.left =
-                    -parseInt(this._cellSize * position) + "px";
+            _this._playerPosition = position;
+            var currentGridOffset = parseInt("" + _this._cellSize * offset);
+            if (_this._previousGridOffset !== currentGridOffset) {
+                _this._gridNode.style.left = -currentGridOffset + "px";
+                _this._playerNode.style.left =
+                    -parseInt("" + _this._cellSize * position) + "px";
             }
-            this._previousGridOffset = currentGridOffset;
+            _this._previousGridOffset = currentGridOffset;
         });
         this._addHandler("move", function (player, cell) {
             // Relocate the player
-            this._crosshairNode.style.left =
-                (parseInt(this._playerPosition) + player.x - 1) * this._cellSize + "px";
-            this._crosshairNode.style.top = (player.y - 1) * this._cellSize + "px";
+            _this._crosshairNode.style.left =
+                (parseInt("" + _this._playerPosition) + player.x - 1) * _this._cellSize +
+                    "px";
+            _this._crosshairNode.style.top = (player.y - 1) * _this._cellSize + "px";
         });
         this._addHandler("cell", function (cell) {
             var cellNode = cell.data["node"];
@@ -601,86 +605,86 @@ var __spreadArrays = (this && this.__spreadArrays) || function () {
      */
     var CanvasTyperdickRenderer = Object.create(TyperdickRenderer);
     CanvasTyperdickRenderer.initialize = function (mainNode) {
+        var _this = this;
         TyperdickRenderer.initialize.call(this, mainNode);
         this._addHandler("setup", function (grid, player) {
-            var self = this;
-            this._playerPosition = 0;
-            this._canvasNode = document.createElement("canvas");
+            _this._playerPosition = 0;
+            _this._canvasNode = document.createElement("canvas");
             var gridNode = mainNode.querySelector(".grid");
             gridNode.style.right = "0";
-            gridNode.appendChild(this._canvasNode);
-            this._canvasContext = this._canvasNode.getContext("2d");
-            this.handle("resize", grid, player);
+            gridNode.appendChild(_this._canvasNode);
+            _this._canvasContext = _this._canvasNode.getContext("2d");
+            _this.handle("resize", grid, player);
             grid.forEach(function (column, columnIndex) {
                 column.forEach(function (cell, cellIndex) {
                     for (var modifierName in Cell.modifiers) {
                         if (cell.type & Cell.modifiers[modifierName]) {
                         }
                     }
-                    self._canvasContext.fillText(cell.label, columnIndex * self._cellSize, cellIndex * self._cellSize);
+                    _this._canvasContext.fillText(cell.label, columnIndex * _this._cellSize, cellIndex * _this._cellSize);
                 });
             });
             // To prevent a glitchy-looking animation, show the player after CSS processing...
             setTimeout(function () {
-                self._playerNode.classList.add("visible");
+                _this._playerNode.classList.add("visible");
             });
             // We also start handling resizes automatically
             window.addEventListener("resize", function () {
-                self.handle("resize", grid, player);
+                _this.handle("resize", grid, player);
             });
         });
         this._addHandler("resize", function (grid, player) {
             // Wow. So work to get basic information. Very verbosity. Wow.
-            var gameStyle = getComputedStyle(this._gameNode);
+            var gameStyle = getComputedStyle(_this._gameNode);
             var width = document.documentElement.clientWidth -
                 parseInt(gameStyle.marginLeft.replace(/px$/, "")) -
                 parseInt(gameStyle.marginRight.replace(/px$/, ""));
             var height = document.documentElement.clientHeight -
-                this._statusNode.clientHeight -
-                this._instructionsNode.clientHeight -
+                _this._statusNode.clientHeight -
+                _this._instructionsNode.clientHeight -
                 parseInt(gameStyle.marginTop.replace(/px$/, "")) -
                 parseInt(gameStyle.marginBottom.replace(/px$/, ""));
             // Cell size should always be such that we don't create scrollbars
             if (width / height > grid.width / grid.height) {
-                this._cellSize = parseInt(height / grid.height);
+                _this._cellSize = parseInt("" + height / grid.height);
             }
             else {
-                this._cellSize = parseInt(width / grid.width);
+                _this._cellSize = parseInt("" + width / grid.width);
             }
-            var adjustedWidth = this._cellSize * grid.width;
-            var adjustedHeight = this._cellSize * grid.height;
+            var adjustedWidth = _this._cellSize * grid.width;
+            var adjustedHeight = _this._cellSize * grid.height;
             // Resize the game
-            this._gameNode.style.width = adjustedWidth + "px";
-            this._gameNode.style.height = adjustedHeight + "px";
-            this._canvasNode.width = adjustedWidth;
-            this._canvasNode.height = adjustedHeight;
-            this._canvasNode.style.fontSize =
-                parseInt(self._cellSize * self._fontSizeMultiplier) + "px";
+            _this._gameNode.style.width = adjustedWidth + "px";
+            _this._gameNode.style.height = adjustedHeight + "px";
+            _this._canvasNode.width = adjustedWidth;
+            _this._canvasNode.height = adjustedHeight;
+            _this._canvasNode.style.fontSize =
+                parseInt("" + _this._cellSize * _this._fontSizeMultiplier) + "px";
             // Resize and relocate the player
-            this._playerNode.style.left =
-                -parseInt(this._cellSize * this._playerPosition) + "px";
-            this._crosshairNode.style.left =
-                (parseInt(this._playerPosition) + player.x - 1) * this._cellSize + "px";
-            this._crosshairNode.style.top = (player.y - 1) * this._cellSize + "px";
-            this._crosshairNode.style.width = this._cellSize + "px";
-            this._crosshairNode.style.height = this._cellSize + "px";
-            this._crosshairNode.style.borderWidth = this._cellSize + "px";
+            _this._playerNode.style.left =
+                -parseInt("" + _this._cellSize * _this._playerPosition) + "px";
+            _this._crosshairNode.style.left =
+                (parseInt(_this._playerPosition) + player.x - 1) * _this._cellSize + "px";
+            _this._crosshairNode.style.top = (player.y - 1) * _this._cellSize + "px";
+            _this._crosshairNode.style.width = _this._cellSize + "px";
+            _this._crosshairNode.style.height = _this._cellSize + "px";
+            _this._crosshairNode.style.borderWidth = _this._cellSize + "px";
         });
         this._addHandler("cycle", function (grid) { });
         this._addHandler("scroll", function (offset, position) {
-            this._playerPosition = position;
-            var currentGridOffset = parseInt(this._cellSize * offset);
-            if (this._previousGridOffset !== currentGridOffset) {
-                this._playerNode.style.left =
-                    -parseInt(this._cellSize * position) + "px";
+            _this._playerPosition = position;
+            var currentGridOffset = parseInt("" + _this._cellSize * offset);
+            if (_this._previousGridOffset !== currentGridOffset) {
+                _this._playerNode.style.left =
+                    -parseInt("" + _this._cellSize * position) + "px";
             }
-            this._previousGridOffset = currentGridOffset;
+            _this._previousGridOffset = currentGridOffset;
         });
         this._addHandler("move", function (player, cell) {
             // Relocate the player
-            this._crosshairNode.style.left =
-                (parseInt(this._playerPosition) + player.x - 1) * this._cellSize + "px";
-            this._crosshairNode.style.top = (player.y - 1) * this._cellSize + "px";
+            _this._crosshairNode.style.left =
+                (parseInt(_this._playerPosition) + player.x - 1) * _this._cellSize + "px";
+            _this._crosshairNode.style.top = (player.y - 1) * _this._cellSize + "px";
         });
         this._addHandler("cell", function (cell) {
             for (var modifierName in Cell.modifiers) {

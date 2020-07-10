@@ -567,21 +567,22 @@
    */
 
   const Renderer: RendererType = Object.create(Base);
-  type RendererType = {
-    handle(action: string, ...args: any[]);
+  type RendererType = BaseType & {
+    handle(action: string, ...args: any[]): void;
+    _handlers: { [eventName: string]: EventHandlerType[] }; // ? is this more like "handlerses" or "handlerLists"?
+    _addHandler(eventName: string, handler: EventHandlerType): void;
   };
+  type EventHandlerType = (...args: any[]) => void;
 
   Renderer.initialize = function () {
     this._handlers = {};
   };
 
-  Renderer.handle = function (eventName) {
-    var self = this;
-
-    if (this._handlers[eventName] !== undefined) {
-      var handlerArguments = Array.prototype.slice.call(arguments, 1);
-      this._handlers[eventName].forEach(function (handler) {
-        handler.apply(self, handlerArguments);
+  Renderer.handle = function (eventName, ...args) {
+    const eventHandlersList = this._handlers[eventName];
+    if (eventHandlersList !== undefined) {
+      eventHandlersList.forEach((handler) => {
+        handler.apply(this, args);
       });
     }
   };
@@ -597,57 +598,73 @@
    * TyperdickRenderer: common, but non-generic functionality
    */
 
-  var TyperdickRenderer = Object.create(Renderer);
+  const TyperdickRenderer: TyperdickRendererType = Object.create(Renderer);
+  type TyperdickRendererType = RendererType & {
+    initialize(mainNode: HTMLElement): void;
+    _fontSizeMultiplier: number;
+    _gameNode: HTMLElement;
+    _statusNode: HTMLElement;
+    _instructionsNode: HTMLElement;
+    _playerNode: HTMLElement;
+    _crosshairNode: HTMLElement;
+    _loseOverlayNode: HTMLElement;
+  };
 
-  TyperdickRenderer.initialize = function (mainNode) {
+  TyperdickRenderer.initialize = function (mainNode: HTMLElement) {
     Renderer.initialize.call(this);
 
     this._fontSizeMultiplier = 0.85;
-    this._gameNode = mainNode.querySelector(".game");
-    this._statusNode = mainNode.querySelector(".status");
-    this._instructionsNode = mainNode.querySelector(".instructions");
-    this._playerNode = mainNode.querySelector(".player");
-    this._crosshairNode = mainNode.querySelector(".crosshair");
-    this._loseOverlayNode = mainNode.querySelector(".lose.overlay");
+    this._gameNode = mainNode.querySelector(".game") as HTMLElement;
+    this._statusNode = mainNode.querySelector(".status") as HTMLElement;
+    this._instructionsNode = mainNode.querySelector(
+      ".instructions"
+    ) as HTMLElement;
+    this._playerNode = mainNode.querySelector(".player") as HTMLElement;
+    this._crosshairNode = mainNode.querySelector(".crosshair") as HTMLElement;
+    this._loseOverlayNode = mainNode.querySelector(
+      ".lose.overlay"
+    ) as HTMLElement;
 
-    this._addHandler("lose", function (score, speed, time) {
-      this._loseOverlayNode.querySelector(".tweet").setAttribute(
+    this._addHandler("lose", (score, speed, time) => {
+      (this._loseOverlayNode.querySelector(
+        ".tweet"
+      ) as HTMLElement).setAttribute(
         "href",
-        "https://twitter.com/intent/tweet?" +
+        `https://twitter.com/intent/tweet?${[
           [
-            [
-              "text",
-              "I only scored " +
-                score +
-                " points in Typerdick: the dickishly hard typing game",
-            ],
-            //      ['hashtags', 'typerdick'                                                                      ] ,
-            ["url", "http://typerdick.com"],
-          ]
-            .map(function (item) {
-              return (
-                encodeURIComponent(item[0]) + "=" + encodeURIComponent(item[1])
-              );
-            })
-            .join("&")
+            "text",
+            "I only scored " +
+              score +
+              " points in Typerdick: the dickishly hard typing game",
+          ],
+          //      ['hashtags', 'typerdick'                                                                      ] ,
+          ["url", "http://typerdick.com"],
+        ]
+          .map(
+            (item) =>
+              `${encodeURIComponent(item[0])}=${encodeURIComponent(item[1])}`
+          )
+          .join("&")}`
       );
       this._loseOverlayNode.classList.add("visible");
     });
 
-    this._addHandler("score", function (value) {
-      this._statusNode.querySelector(".score.field").textContent = value;
+    this._addHandler("score", (value) => {
+      (this._statusNode.querySelector(
+        ".score.field"
+      ) as HTMLElement).textContent = `${value}`;
     });
 
-    this._addHandler("speed", function (value) {
-      this._statusNode.querySelector(
+    this._addHandler("speed", (value) => {
+      (this._statusNode.querySelector(
         ".speed.field"
-      ).textContent = value.toFixed(2);
+      ) as HTMLElement).textContent = Number(value).toFixed(2);
     });
 
-    this._addHandler("time", function (value) {
-      this._statusNode.querySelector(".time.field").textContent = value.toFixed(
-        1
-      );
+    this._addHandler("time", (value) => {
+      (this._statusNode.querySelector(
+        ".time.field"
+      ) as HTMLElement).textContent = Number(value).toFixed(1);
     });
   };
 
@@ -655,7 +672,15 @@
    * HTMLRenderer: for browsers that don't support canvas
    */
 
-  var HtmlTyperdickRenderer = Object.create(TyperdickRenderer);
+  const HtmlTyperdickRenderer: HtmlTyperdickRendererType = Object.create(
+    TyperdickRenderer
+  );
+  type HtmlTyperdickRendererType = TyperdickRendererType & {
+    _previousGridOffset: number;
+    _gridNode: HTMLElement;
+    _cellSize: number;
+    _playerPosition: number;
+  };
 
   HtmlTyperdickRenderer.initialize = function (mainNode) {
     TyperdickRenderer.initialize.call(this, mainNode);
@@ -664,15 +689,13 @@
 
     this._gridNode = mainNode.querySelector(".grid");
 
-    this._addHandler("setup", function (grid, player) {
-      var self = this;
-
+    this._addHandler("setup", (grid, player) => {
       this._playerPosition = 0;
 
-      grid.forEach(function (column, columnIndex) {
+      grid.forEach((column, columnIndex) => {
         var columnNode = document.createElement("div");
         columnNode.classList.add("column");
-        column.forEach(function (cell, cellIndex) {
+        column.forEach((cell, cellIndex) => {
           var cellNode = document.createElement("div");
           cellNode.classList.add("cell");
           for (var modifierName in Cell.modifiers) {
@@ -688,30 +711,30 @@
           cell.data["node"] = cellNode;
         });
         column.data["node"] = columnNode;
-        self._gridNode.appendChild(columnNode);
+        this._gridNode.appendChild(columnNode);
       });
 
       this.handle("resize", grid, player);
 
       // To prevent a glitchy-looking animation, show the player after CSS processing...
-      setTimeout(function () {
-        self._playerNode.classList.add("visible");
+      setTimeout(() => {
+        this._playerNode.classList.add("visible");
       });
 
       // We also start handling resizes automatically
-      window.addEventListener("resize", function () {
-        self.handle("resize", grid, player);
+      window.addEventListener("resize", () => {
+        this.handle("resize", grid, player);
       });
     });
 
-    this._addHandler("resize", function (grid, player) {
+    this._addHandler("resize", (grid, player) => {
       // Wow. So work to get basic information. Very verbosity. Wow.
-      var gameStyle = getComputedStyle(this._gameNode);
-      var width =
+      const gameStyle = getComputedStyle(this._gameNode);
+      const width =
         document.documentElement.clientWidth -
         parseInt(gameStyle.marginLeft.replace(/px$/, "")) -
         parseInt(gameStyle.marginRight.replace(/px$/, ""));
-      var height =
+      const height =
         document.documentElement.clientHeight -
         this._statusNode.clientHeight -
         this._instructionsNode.clientHeight -
@@ -720,13 +743,13 @@
 
       // Cell size should always be such that we don't create scrollbars
       if (width / height > grid.width / grid.height) {
-        this._cellSize = parseInt(height / grid.height);
+        this._cellSize = parseInt(`${height / grid.height}`);
       } else {
-        this._cellSize = parseInt(width / grid.width);
+        this._cellSize = parseInt(`${width / grid.width}`);
       }
 
-      var adjustedWidth = this._cellSize * grid.width;
-      var adjustedHeight = this._cellSize * grid.height;
+      const adjustedWidth = this._cellSize * grid.width;
+      const adjustedHeight = this._cellSize * grid.height;
 
       // Resize the game
       this._gameNode.style.width = adjustedWidth + "px";
@@ -737,53 +760,51 @@
 
       // Resize and relocate the player
       this._playerNode.style.left =
-        -parseInt(this._cellSize * this._playerPosition) + "px";
+        -parseInt(`${this._cellSize * this._playerPosition}`) + "px";
       this._crosshairNode.style.left =
-        (parseInt(this._playerPosition) + player.x - 1) * this._cellSize + "px";
+        (parseInt(`${this._playerPosition}`) + player.x - 1) * this._cellSize +
+        "px";
       this._crosshairNode.style.top = (player.y - 1) * this._cellSize + "px";
       this._crosshairNode.style.width = this._cellSize + "px";
       this._crosshairNode.style.height = this._cellSize + "px";
       this._crosshairNode.style.borderWidth = this._cellSize + "px";
 
-      var self = this;
-
       // Resize the cells
-      grid.forEach(function (column, columnIndex) {
-        var columnNode = column.data["node"];
-        columnNode.style.height = grid.height * self._cellSize + "px";
-        columnNode.style.width = self._cellSize + "px";
-        columnNode.style.left = columnIndex * self._cellSize + "px";
-        column.forEach(function (cell, cellIndex) {
-          var cellNode = cell.data["node"];
-          cellNode.style.top = cellIndex * self._cellSize + "px";
-          cellNode.style.width = self._cellSize + "px";
-          cellNode.style.height = self._cellSize + "px";
+      grid.forEach((column, columnIndex) => {
+        const columnNode = column.data["node"];
+        columnNode.style.height = grid.height * this._cellSize + "px";
+        columnNode.style.width = this._cellSize + "px";
+        columnNode.style.left = columnIndex * this._cellSize + "px";
+        column.forEach((cell, cellIndex) => {
+          const cellNode = cell.data["node"];
+          cellNode.style.top = cellIndex * this._cellSize + "px";
+          cellNode.style.width = this._cellSize + "px";
+          cellNode.style.height = this._cellSize + "px";
           cellNode.querySelector(".label").style.fontSize =
-            parseInt(self._cellSize * self._fontSizeMultiplier) + "px";
+            parseInt(`${this._cellSize * this._fontSizeMultiplier}`) + "px";
         });
       });
     });
 
-    this._addHandler("start", function () {
+    this._addHandler("start", () => {
       this._gameNode.classList.add("ongoing");
     });
 
-    this._addHandler("run", function () {
+    this._addHandler("run", () => {
       this._gameNode.classList.remove("paused");
     });
 
-    this._addHandler("pause", function () {
+    this._addHandler("pause", () => {
       this._gameNode.classList.add("paused");
     });
 
-    this._addHandler("cycle", function (grid) {
-      var self = this;
-      grid.forEach(function (column, columnIndex) {
-        var columnNode = column.data["node"];
+    this._addHandler("cycle", (grid) => {
+      grid.forEach((column, columnIndex) => {
+        const columnNode = column.data["node"];
         if (columnIndex === grid.length - 1) {
-          column.forEach(function (cell) {
-            var cellNode = cell.data["node"];
-            for (var modifierName in Cell.modifiers) {
+          column.forEach((cell) => {
+            const cellNode = cell.data["node"];
+            for (let modifierName in Cell.modifiers) {
               if (cell.type & Cell.modifiers[modifierName]) {
                 cellNode.classList.add(modifierName);
               } else {
@@ -793,31 +814,32 @@
             cellNode.querySelector(".label").textContent = cell.label;
           });
         }
-        columnNode.style.left = columnIndex * self._cellSize + "px";
+        columnNode.style.left = columnIndex * this._cellSize + "px";
       });
     });
 
-    this._addHandler("scroll", function (offset, position) {
+    this._addHandler("scroll", (offset, position) => {
       this._playerPosition = position;
-      var currentGridOffset = parseInt(this._cellSize * offset);
+      const currentGridOffset = parseInt(`${this._cellSize * offset}`);
       if (this._previousGridOffset !== currentGridOffset) {
         this._gridNode.style.left = -currentGridOffset + "px";
         this._playerNode.style.left =
-          -parseInt(this._cellSize * position) + "px";
+          -parseInt(`${this._cellSize * position}`) + "px";
       }
       this._previousGridOffset = currentGridOffset;
     });
 
-    this._addHandler("move", function (player, cell) {
+    this._addHandler("move", (player, cell) => {
       // Relocate the player
       this._crosshairNode.style.left =
-        (parseInt(this._playerPosition) + player.x - 1) * this._cellSize + "px";
+        (parseInt(`${this._playerPosition}`) + player.x - 1) * this._cellSize +
+        "px";
       this._crosshairNode.style.top = (player.y - 1) * this._cellSize + "px";
     });
 
-    this._addHandler("cell", function (cell) {
-      var cellNode = cell.data["node"];
-      for (var modifierName in Cell.modifiers) {
+    this._addHandler("cell", (cell) => {
+      const cellNode = cell.data["node"];
+      for (let modifierName in Cell.modifiers) {
         if (cell.type & Cell.modifiers[modifierName]) {
           cellNode.classList.add(modifierName);
         } else {
@@ -831,17 +853,18 @@
    * CanvasRenderer: the shape of things to come (they've not yet come)
    */
 
-  var CanvasTyperdickRenderer = Object.create(TyperdickRenderer);
+  const CanvasTyperdickRenderer: CanvasTyperdickRendererType = Object.create(
+    TyperdickRenderer
+  );
+  type CanvasTyperdickRendererType = any; // TODO
 
   CanvasTyperdickRenderer.initialize = function (mainNode) {
     TyperdickRenderer.initialize.call(this, mainNode);
 
-    this._addHandler("setup", function (grid, player) {
-      var self = this;
-
+    this._addHandler("setup", (grid, player) => {
       this._playerPosition = 0;
       this._canvasNode = document.createElement("canvas");
-      var gridNode = mainNode.querySelector(".grid");
+      const gridNode = mainNode.querySelector(".grid");
       gridNode.style.right = "0";
       gridNode.appendChild(this._canvasNode);
 
@@ -849,39 +872,39 @@
 
       this.handle("resize", grid, player);
 
-      grid.forEach(function (column, columnIndex) {
-        column.forEach(function (cell, cellIndex) {
-          for (var modifierName in Cell.modifiers) {
+      grid.forEach((column, columnIndex) => {
+        column.forEach((cell, cellIndex) => {
+          for (let modifierName in Cell.modifiers) {
             if (cell.type & Cell.modifiers[modifierName]) {
             }
           }
-          self._canvasContext.fillText(
+          this._canvasContext.fillText(
             cell.label,
-            columnIndex * self._cellSize,
-            cellIndex * self._cellSize
+            columnIndex * this._cellSize,
+            cellIndex * this._cellSize
           );
         });
       });
 
       // To prevent a glitchy-looking animation, show the player after CSS processing...
-      setTimeout(function () {
-        self._playerNode.classList.add("visible");
+      setTimeout(() => {
+        this._playerNode.classList.add("visible");
       });
 
       // We also start handling resizes automatically
-      window.addEventListener("resize", function () {
-        self.handle("resize", grid, player);
+      window.addEventListener("resize", () => {
+        this.handle("resize", grid, player);
       });
     });
 
-    this._addHandler("resize", function (grid, player) {
+    this._addHandler("resize", (grid, player) => {
       // Wow. So work to get basic information. Very verbosity. Wow.
-      var gameStyle = getComputedStyle(this._gameNode);
-      var width =
+      const gameStyle = getComputedStyle(this._gameNode);
+      const width =
         document.documentElement.clientWidth -
         parseInt(gameStyle.marginLeft.replace(/px$/, "")) -
         parseInt(gameStyle.marginRight.replace(/px$/, ""));
-      var height =
+      const height =
         document.documentElement.clientHeight -
         this._statusNode.clientHeight -
         this._instructionsNode.clientHeight -
@@ -890,13 +913,13 @@
 
       // Cell size should always be such that we don't create scrollbars
       if (width / height > grid.width / grid.height) {
-        this._cellSize = parseInt(height / grid.height);
+        this._cellSize = parseInt(`${height / grid.height}`);
       } else {
-        this._cellSize = parseInt(width / grid.width);
+        this._cellSize = parseInt(`${width / grid.width}`);
       }
 
-      var adjustedWidth = this._cellSize * grid.width;
-      var adjustedHeight = this._cellSize * grid.height;
+      const adjustedWidth = this._cellSize * grid.width;
+      const adjustedHeight = this._cellSize * grid.height;
 
       // Resize the game
       this._gameNode.style.width = adjustedWidth + "px";
@@ -906,11 +929,11 @@
       this._canvasNode.height = adjustedHeight;
 
       this._canvasNode.style.fontSize =
-        parseInt(self._cellSize * self._fontSizeMultiplier) + "px";
+        parseInt(`${this._cellSize * this._fontSizeMultiplier}`) + "px";
 
       // Resize and relocate the player
       this._playerNode.style.left =
-        -parseInt(this._cellSize * this._playerPosition) + "px";
+        -parseInt(`${this._cellSize * this._playerPosition}`) + "px";
       this._crosshairNode.style.left =
         (parseInt(this._playerPosition) + player.x - 1) * this._cellSize + "px";
       this._crosshairNode.style.top = (player.y - 1) * this._cellSize + "px";
@@ -919,27 +942,27 @@
       this._crosshairNode.style.borderWidth = this._cellSize + "px";
     });
 
-    this._addHandler("cycle", function (grid) {});
+    this._addHandler("cycle", (grid) => {});
 
-    this._addHandler("scroll", function (offset, position) {
+    this._addHandler("scroll", (offset, position) => {
       this._playerPosition = position;
-      var currentGridOffset = parseInt(this._cellSize * offset);
+      const currentGridOffset = parseInt(`${this._cellSize * offset}`);
       if (this._previousGridOffset !== currentGridOffset) {
         this._playerNode.style.left =
-          -parseInt(this._cellSize * position) + "px";
+          -parseInt(`${this._cellSize * position}`) + "px";
       }
       this._previousGridOffset = currentGridOffset;
     });
 
-    this._addHandler("move", function (player, cell) {
+    this._addHandler("move", (player, cell) => {
       // Relocate the player
       this._crosshairNode.style.left =
         (parseInt(this._playerPosition) + player.x - 1) * this._cellSize + "px";
       this._crosshairNode.style.top = (player.y - 1) * this._cellSize + "px";
     });
 
-    this._addHandler("cell", function (cell) {
-      for (var modifierName in Cell.modifiers) {
+    this._addHandler("cell", (cell) => {
+      for (let modifierName in Cell.modifiers) {
         if (cell.type & Cell.modifiers[modifierName]) {
           // TODO
         } else {
