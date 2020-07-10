@@ -36,7 +36,7 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     // start the renderer
-    //  var renderer = CanvasTyperdickRenderer.new(document.querySelector('.main'));
+    //  const renderer = CanvasTyperdickRenderer.new(document.querySelector('.main'));
     const renderer = HtmlTyperdickRenderer.new(document.querySelector(".main"));
 
     // start the game
@@ -181,7 +181,7 @@
    * Cell: the smallest unit of bullshit
    */
 
-  const Cell = Object.create(Base);
+  const Cell: CellType = Object.create(Base);
   type CellType = BaseType & {
     type: number;
     label: string;
@@ -255,7 +255,7 @@
   };
 
   Grid.getCell = function (x: number, y: number): CellType | undefined {
-    var column = this[x];
+    const column = this[x];
     if (column === undefined) {
       return undefined;
     }
@@ -263,8 +263,8 @@
   };
 
   Grid.cycle = function () {
-    var column = this[0];
-    for (var y = 0; y < column.length; ++y) {
+    const column = this[0];
+    for (let y = 0; y < column.length; ++y) {
       const cell = column[y];
 
       // A string containing all the letters that can't be used for the current cell
@@ -284,13 +284,13 @@
         }, "");
 
       // A string containing all the valid letters
-      var possibleCellLabels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".replace(
+      const possibleCellLabels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".replace(
         new RegExp("[" + clashingCellLabels + "]", "g"),
         ""
       );
 
       // The single valid chosen letter
-      var currentCellLabel =
+      const currentCellLabel =
         possibleCellLabels[
           parseInt(`${Math.random() * possibleCellLabels.length}`)
         ];
@@ -300,7 +300,7 @@
       cell.type = 0;
 
       // Apply new modifiers if the Gods will it
-      for (var modifierName in this._probabilities) {
+      for (let modifierName in this._probabilities) {
         if (Math.random() < this._probabilities[modifierName]) {
           cell.type |= Cell.modifiers[modifierName];
         }
@@ -410,7 +410,7 @@
 
     // Try to move the grid once per tick
     this._timer.addTickAction((relativeElapsedTime, totalElapsedTime) => {
-      var relativeElapsedTimeInSeconds = relativeElapsedTime / 1000;
+      const relativeElapsedTimeInSeconds = relativeElapsedTime / 1000;
       this._offset += this._speed * relativeElapsedTimeInSeconds;
       this._position += this._speed * relativeElapsedTimeInSeconds;
 
@@ -693,17 +693,17 @@
       this._playerPosition = 0;
 
       grid.forEach((column, columnIndex) => {
-        var columnNode = document.createElement("div");
+        const columnNode = document.createElement("div");
         columnNode.classList.add("column");
         column.forEach((cell, cellIndex) => {
-          var cellNode = document.createElement("div");
+          const cellNode = document.createElement("div");
           cellNode.classList.add("cell");
-          for (var modifierName in Cell.modifiers) {
+          for (let modifierName in Cell.modifiers) {
             if (cell.type & Cell.modifiers[modifierName]) {
               cellNode.classList.add(modifierName);
             }
           }
-          var labelNode = document.createElement("span");
+          const labelNode = document.createElement("span");
           labelNode.classList.add("label");
           labelNode.textContent = cell.label;
           cellNode.appendChild(labelNode);
